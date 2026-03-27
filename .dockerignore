@@ -1,0 +1,81 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Tests
+tests/
+*_test.go
+coverage.out
+*.test
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.test
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+*.pid
+
+# Docker files (don't need in image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Specs and planning
+specs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Dependencies (will be downloaded in build)
+vendor/
+
+# Test coverage
+coverage/
+*.cover
+*.out
+
+# Node modules (if any frontend tooling)
+node_modules/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Backup files
+*.bak
+*.backup
+*.old

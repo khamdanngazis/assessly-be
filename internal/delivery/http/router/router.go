@@ -1,0 +1,149 @@
+package router
+
+import (
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+)
+
+// Router wraps chi router and provides route registration
+type Router struct {
+	*chi.Mux
+}
+
+// New creates a new router instance
+func New() *Router {
+	return &Router{
+		Mux: chi.NewRouter(),
+	}
+}
+
+// SetupRoutes configures all application routes
+func (r *Router) SetupRoutes(
+	healthHandler http.HandlerFunc,
+	metricsHandler http.Handler,
+	authHandler interface {
+		Register(w http.ResponseWriter, r *http.Request)
+		Login(w http.ResponseWriter, r *http.Request)
+		RequestPasswordReset(w http.ResponseWriter, r *http.Request)
+		ResetPassword(w http.ResponseWriter, r *http.Request)
+	},
+	testHandler interface {
+		CreateTest(w http.ResponseWriter, r *http.Request)
+		PublishTest(w http.ResponseWriter, r *http.Request)
+	},
+	questionHandler interface {
+		AddQuestion(w http.ResponseWriter, r *http.Request)
+	},
+	submissionHandler interface {
+		GenerateAccessToken(w http.ResponseWriter, r *http.Request)
+		SubmitTest(w http.ResponseWriter, r *http.Request)
+		GetSubmission(w http.ResponseWriter, r *http.Request)
+	},
+	reviewHandler interface {
+		HandleAddManualReview(w http.ResponseWriter, r *http.Request)
+		HandleGetReview(w http.ResponseWriter, r *http.Request)
+		HandleListSubmissions(w http.ResponseWriter, r *http.Request)
+	},
+	jwtMiddleware func(next http.Handler) http.Handler,
+) {
+	// Health check endpoint (no auth required)
+	r.Get("/health", healthHandler)
+
+	// T115: Prometheus metrics endpoint (no auth required)
+	if metricsHandler != nil {
+		r.Handle("/metrics", metricsHandler)
+	} else {
+		r.Get("/metrics", notImplementedHandler)
+	}
+
+	// API v1 routes
+	r.Route("/api/v1", func(r chi.Router) {
+		// Public routes (no auth required)
+		r.Group(func(r chi.Router) {
+			// Auth endpoints
+			if authHandler != nil {
+				r.Post("/auth/register", authHandler.Register)
+				r.Post("/auth/login", authHandler.Login)
+				r.Post("/auth/request-reset", authHandler.RequestPasswordReset)
+				r.Put("/auth/reset-password", authHandler.ResetPassword)
+			} else {
+				r.Post("/auth/register", notImplementedHandler)
+				r.Post("/auth/login", notImplementedHandler)
+				r.Post("/auth/request-reset", notImplementedHandler)
+				r.Put("/auth/reset-password", notImplementedHandler)
+			}
+
+			// Participant submission endpoints
+			if submissionHandler != nil {
+				r.Post("/submissions/access", submissionHandler.GenerateAccessToken)
+				r.Post("/submissions", submissionHandler.SubmitTest)
+				r.Get("/submissions/{id}", submissionHandler.GetSubmission)
+			} else {
+				r.Post("/submissions/access", notImplementedHandler)
+				r.Post("/submissions", notImplementedHandler)
+				r.Get("/submissions/{id}", notImplementedHandler)
+			}
+		})
+
+		// Protected routes (auth required)
+		r.Group(func(r chi.Router) {
+			// Apply JWT middleware
+			if jwtMiddleware != nil {
+				r.Use(jwtMiddleware)
+			}
+
+			// Test creator endpoints
+			r.Route("/tests", func(r chi.Router) {
+				r.Get("/", notImplementedHandler)
+				if testHandler != nil {
+					r.Post("/", testHandler.CreateTest)
+					r.Post("/{testID}/publish", testHandler.PublishTest)
+				} else {
+					r.Post("/", notImplementedHandler)
+					r.Post("/{testID}/publish", notImplementedHandler)
+				}
+				r.Get("/{testID}", notImplementedHandler)
+				r.Put("/{testID}", notImplementedHandler)
+				r.Delete("/{testID}", notImplementedHandler)
+
+				// Questions
+				if questionHandler != nil {
+					r.Post("/{testID}/questions", questionHandler.AddQuestion)
+				} else {
+					r.Post("/{testID}/questions", notImplementedHandler)
+				}
+				r.Put("/{testID}/questions/{questionID}", notImplementedHandler)
+				r.Delete("/{testID}/questions/{questionID}", notImplementedHandler)
+
+				// T089: Submissions list for reviewers
+				if reviewHandler != nil {
+					r.Get("/{testId}/submissions", reviewHandler.HandleListSubmissions)
+				} else {
+					r.Get("/{testId}/submissions", notImplementedHandler)
+				}
+			})
+
+			// T089: Review endpoints (requires reviewer role)
+			r.Route("/reviews", func(r chi.Router) {
+				if reviewHandler != nil {
+					r.Put("/{answerId}", reviewHandler.HandleAddManualReview)
+					r.Get("/{answerId}", reviewHandler.HandleGetReview)
+				} else {
+					r.Put("/{answerId}", notImplementedHandler)
+					r.Get("/{answerId}", notImplementedHandler)
+				}
+			})
+
+			// User endpoints
+			r.Get("/me", notImplementedHandler)
+		})
+	})
+}
+
+// notImplementedHandler returns 501 Not Implemented
+func notImplementedHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotImplemented)
+	w.Write([]byte(`{"error":"endpoint not implemented yet"}`))
+}

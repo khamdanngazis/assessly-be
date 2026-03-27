@@ -1,0 +1,91 @@
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Staticcheck is a go vet on steroids
+    - typecheck     # Type-check Go code
+    - unused        # Check for unused constants, variables, functions and types
+    - gofmt         # Gofmt checks whether code was gofmt-ed
+    - goimports     # Check import statements are formatted according to the 'goimport' command
+    - misspell      # Finds commonly misspelled English words in comments
+    - revive        # Fast, configurable, extensible, flexible, and beautiful linter for Go
+    - gosec         # Inspects source code for security problems
+    - bodyclose     # Checks whether HTTP response body is closed successfully
+    - noctx         # Finds sending http request without context.Context
+    - sqlclosecheck # Checks that sql.Rows and sql.Stmt are closed
+    - rowserrcheck  # Checks whether Err of rows is checked successfully
+    - exportloopref # Checks for pointers to enclosing loop variables
+    - gocyclo       # Computes and checks the cyclomatic complexity of functions
+    - dupl          # Tool for code clone detection
+    - goconst       # Finds repeated strings that could be replaced by a constant
+    - unconvert     # Remove unnecessary type conversions
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    check-shadowing: true
+    enable-all: true
+
+  gocyclo:
+    min-complexity: 15
+
+  dupl:
+    threshold: 100
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  misspell:
+    locale: US
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+      - name: var-naming
+        severity: warning
+      - name: indent-error-flow
+        severity: warning
+      - name: errorf
+        severity: warning
+
+  gosec:
+    excludes:
+      - G104 # Audit errors not checked - covered by errcheck
+    severity: medium
+    confidence: medium
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - goconst
+
+    # Exclude known false positives
+    - text: "Use of weak random number generator"
+      linters:
+        - gosec
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

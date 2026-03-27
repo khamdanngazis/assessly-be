@@ -1,0 +1,94 @@
+services:
+  # API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: assessly-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      # Server
+      SERVER_PORT: "8080"
+      SERVER_ENV: ${SERVER_ENV:-development}
+      
+      # Database (connect to host machine)
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-12345abc}
+      DB_NAME: ${DB_NAME:-assessly}
+      DB_SSL_MODE: ${DB_SSL_MODE:-disable}
+      
+      # Redis (connect to host machine)
+      REDIS_HOST: ${REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-key-in-production}
+      JWT_ISSUER: ${JWT_ISSUER:-assessly}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-24}
+      
+      # Email (SMTP)
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@assessly.com}
+      
+      # AI Groq
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-70b-versatile}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - assessly-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Worker for AI Scoring
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: assessly-worker
+    restart: unless-stopped
+    environment:
+      # Database (connect to host machine)
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-12345abc}
+      DB_NAME: ${DB_NAME:-assessly}
+      DB_SSL_MODE: ${DB_SSL_MODE:-disable}
+      
+      # Redis (connect to host machine)
+      REDIS_HOST: ${REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      
+      # AI Groq
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-70b-versatile}
+      
+      # Worker settings
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
+      WORKER_STREAM: ${WORKER_STREAM:-assessly:scoring}
+      WORKER_GROUP: ${WORKER_GROUP:-scoring-workers}
+      WORKER_CONSUMER: ${WORKER_CONSUMER:-worker-1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - assessly-network
+
+networks:
+  assessly-network:
+    driver: bridge
