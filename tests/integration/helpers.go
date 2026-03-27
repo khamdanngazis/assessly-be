@@ -107,7 +107,7 @@ func runMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 
 	for _, migration := range migrations {
 		filePath := filepath.Join(migrationsDir, migration)
-		content, err := os.ReadFile(filePath)
+		content, err := os.ReadFile(filePath) // #nosec G304 -- migration files are hardcoded and read-only in test environment
 		if err != nil {
 			t.Logf("Warning: Could not read migration %s: %v", migration, err)
 			continue

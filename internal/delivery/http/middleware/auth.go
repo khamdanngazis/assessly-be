@@ -113,7 +113,9 @@ func RequireRole(requiredRole string, logger *slog.Logger) func(next http.Handle
 				)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(`{"error":"insufficient permissions"}`))
+				if _, err := w.Write([]byte(`{"error":"insufficient permissions"}`)); err != nil {
+					// Error writing response, connection may be closed
+				}
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -125,7 +127,9 @@ func RequireRole(requiredRole string, logger *slog.Logger) func(next http.Handle
 func unauthorized(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte(`{"error":"` + message + `"}`))
+	if _, err := w.Write([]byte(`{"error":"` + message + `"}`)); err != nil {
+		// Error writing response, connection may be closed
+	}
 }
 
 // GetUserID extracts user ID from request context

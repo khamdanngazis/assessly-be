@@ -77,8 +77,9 @@ func (q *QueueClient) Dequeue(ctx context.Context, streamName, groupName, consum
 			var createdAt time.Time
 			if createdAtInt != "" {
 				var ts int64
-				fmt.Sscanf(createdAtInt, "%d", &ts)
-				createdAt = time.Unix(ts, 0)
+				if _, err := fmt.Sscanf(createdAtInt, "%d", &ts); err == nil {
+					createdAt = time.Unix(ts, 0)
+				}
 			}
 
 			jobs = append(jobs, Job{

@@ -37,7 +37,9 @@ func Recovery(logger *slog.Logger) func(next http.Handler) http.Handler {
 					// Return 500 Internal Server Error
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(`{"error":"internal server error"}`))
+					if _, err := w.Write([]byte(`{"error":"internal server error"}`)); err != nil {
+						// Error writing response, connection may be closed
+					}
 				}
 			}()
 

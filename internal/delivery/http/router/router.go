@@ -145,5 +145,7 @@ func (r *Router) SetupRoutes(
 func notImplementedHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"error":"endpoint not implemented yet"}`))
+	if _, err := w.Write([]byte(`{"error":"endpoint not implemented yet"}`)); err != nil {
+		// Error writing response, connection may be closed
+	}
 }

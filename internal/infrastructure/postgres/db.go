@@ -23,7 +23,11 @@ func New(ctx context.Context, cfg *config.Config) (*DB, error) {
 	}
 
 	// Configure connection pool
-	poolConfig.MaxConns = int32(cfg.Database.MaxConnections)
+	if cfg.Database.MaxConnections > 0 && cfg.Database.MaxConnections <= 2147483647 {
+		poolConfig.MaxConns = int32(cfg.Database.MaxConnections)
+	} else {
+		poolConfig.MaxConns = 100 // default safe value
+	}
 	poolConfig.MinConns = 2
 	poolConfig.MaxConnLifetime = time.Hour
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
