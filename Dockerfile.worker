@@ -1,0 +1,50 @@
+# Multi-stage Dockerfile for Assessly Worker (AI Scoring)
+# Stage 1: Build
+FROM golang:1.21-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build worker binary
+# CGO_ENABLED=0 for static binary, GOOS=linux for Linux target
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags="-w -s" \
+    -o /app/bin/worker \
+    ./cmd/worker
+
+# Stage 2: Runtime
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
+# Create non-root user
+RUN addgroup -g 1000 assessly && \
+    adduser -D -u 1000 -G assessly assessly
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/bin/worker /app/worker
+
+# Change ownership to non-root user
+RUN chown -R assessly:assessly /app
+
+# Switch to non-root user
+USER assessly
+
+# Run the worker
+CMD ["/app/worker"]
