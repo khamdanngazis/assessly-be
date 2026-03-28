@@ -1,0 +1,1427 @@
+openapi: 3.0.3
+info:
+  title: Assessly Backend API
+  description: |
+    REST API for Assessly flexible assessment system baseline.
+    
+    **Authentication**:
+    - JWT tokens for creators and reviewers (Authorization: Bearer <token>)
+    - Secure tokens for participant test access (URL parameter or header)
+    
+    **Roles**:
+    - Creator: Can create/manage own tests
+    - Reviewer: Can view all published tests and add manual scores
+    - Participant: Anonymous users taking tests (no authentication)
+  version: 1.0.0
+  contact:
+    name: Assessly Team
+  license:
+    name: Private
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+  - url: https://assessly-be-production.up.railway.app/api/v1
+    description: Production (Railway)
+
+tags:
+  - name: Auth
+    description: Authentication and authorization
+  - name: Tests
+    description: Test management (creators)
+  - name: Questions
+    description: Question management within tests
+  - name: Submissions
+    description: Participant test submissions
+  - name: Reviews
+    description: AI and manual scoring
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ============================================================================
+  # AUTH ENDPOINTS
+  # ============================================================================
+  
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register new user account
+      description: Create a new creator or reviewer account with email/password
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 255
+                  example: creator@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  maxLength: 72
+                  example: SecurePass123!
+                role:
+                  type: string
+                  enum: [creator, reviewer]
+                  example: creator
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  email:
+                    type: string
+                  role:
+                    type: string
+                  created_at:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate user
+      description: Login with email/password and receive JWT token
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: creator@example.com
+                password:
+                  type: string
+                  format: password
+                  example: SecurePass123!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT access token (expires in 24 hours)
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Request password reset email
+      description: Send password reset token to user's email (FR-003)
+      operationId: requestPasswordReset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: creator@example.com
+      responses:
+        '202':
+          description: Reset email sent (always returns 202 even if email not found)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: If the email exists, a reset link has been sent
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/reset-password/{token}:
+    put:
+      tags: [Auth]
+      summary: Reset password with token
+      description: Complete password reset using token from email
+      operationId: resetPassword
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Reset token from email link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                new_password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  maxLength: 72
+                  example: NewSecurePass456!
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Password reset successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # TEST ENDPOINTS
+  # ============================================================================
+
+  /tests:
+    get:
+      tags: [Tests]
+      summary: List tests
+      description: |
+        List tests based on user role:
+        - Creators: Only their own tests
+        - Reviewers: All published tests
+      operationId: listTests
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published, all]
+            default: all
+          description: Filter by publish status (creators only)
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Tests retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TestSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Tests]
+      summary: Create new test
+      description: Create a new test (draft) with title and description. Add questions separately.
+      operationId: createTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                  example: Essay Writing 101
+                description:
+                  type: string
+                  maxLength: 5000
+                  example: Write thoughtful essays on programming concepts
+                allow_retakes:
+                  type: boolean
+                  default: false
+                  description: Whether participants can retake this test
+      responses:
+        '201':
+          description: Test created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Test'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Only creators can create tests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tests/{testId}:
+    get:
+      tags: [Tests]
+      summary: Get test details
+      description: |
+        Get test with all questions.
+        - Creators: Can view if they own it
+        - Reviewers: Can view if published
+      operationId: getTest
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+      responses:
+        '200':
+          description: Test retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestWithQuestions'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags: [Tests]
+      summary: Update test
+      description: Update test title, description, or retake settings (creators only)
+      operationId: updateTest
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                description:
+                  type: string
+                  maxLength: 5000
+                allow_retakes:
+                  type: boolean
+      responses:
+        '200':
+          description: Test updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Test'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Tests]
+      summary: Delete test
+      description: Delete test and all associated questions, submissions, answers, reviews (creators only)
+      operationId: deleteTest
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+      responses:
+        '204':
+          description: Test deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tests/{testId}/publish:
+    post:
+      tags: [Tests]
+      summary: Publish test
+      description: Publish test to make it available to participants (requires at least 1 question)
+      operationId: publishTest
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+      responses:
+        '200':
+          description: Test published successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Test'
+        '400':
+          description: Cannot publish (e.g., no questions)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tests/{testId}/unpublish:
+    post:
+      tags: [Tests]
+      summary: Unpublish test
+      description: Unpublish test (make it draft again)
+      operationId: unpublishTest
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+      responses:
+        '200':
+          description: Test unpublished successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Test'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tests/{testId}/access-token:
+    post:
+      tags: [Tests]
+      summary: Generate participant access token (Testing/Development)
+      description: |
+        Generate an access token for a participant to submit test answers.
+        Returns the token directly in the response (development-only endpoint).
+        
+        **Note**: In production, use `/submissions/access` which sends token via email.
+        This endpoint is intended for testing and development purposes.
+      operationId: generateAccessTokenForTest
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Participant email address
+                  example: participant@example.com
+                expiry_hours:
+                  type: integer
+                  minimum: 1
+                  maximum: 168
+                  default: 24
+                  description: Token expiry in hours (default 24)
+                  example: 24
+            examples:
+              default:
+                value:
+                  email: participant@example.com
+                  expiry_hours: 24
+              custom_expiry:
+                value:
+                  email: student@school.com
+                  expiry_hours: 48
+      responses:
+        '200':
+          description: Access token generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: JWT access token for participant
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  test_id:
+                    type: string
+                    format: uuid
+                    description: Test UUID
+                  email:
+                    type: string
+                    format: email
+                    description: Participant email
+                  expiry_hours:
+                    type: integer
+                    description: Token expiry duration
+              examples:
+                success:
+                  value:
+                    access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGVzdC1pZCIsImVtYWlsIjoicGFydGljaXBhbnRAZXhhbXBsZS5jb20iLCJyb2xlIjoicGFydGljaXBhbnQifQ...
+                    test_id: 550e8400-e29b-41d4-a716-446655440000
+                    email: participant@example.com
+                    expiry_hours: 24
+        '400':
+          description: Invalid request (e.g., invalid email, test not published)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Test not found or endpoint not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: endpoint not available
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # QUESTION ENDPOINTS
+  # ============================================================================
+
+  /tests/{testId}/questions:
+    get:
+      tags: [Questions]
+      summary: List test questions
+      description: Get all questions for a test (ordered)
+      operationId: listQuestions
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+      responses:
+        '200':
+          description: Questions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  questions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Question'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Questions]
+      summary: Add question to test
+      description: Add a new essay question to test (creators only)
+      operationId: createQuestion
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, expected_answer, order_num]
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 10000
+                  example: What are the key principles of Clean Architecture?
+                expected_answer:
+                  type: string
+                  minLength: 1
+                  maxLength: 10000
+                  description: Expected answer or rubric for AI scoring
+                  example: Clean Architecture emphasizes separation of concerns, with business logic independent of frameworks, UI, and databases. Key principles include dependency inversion, testability, and clear boundaries between layers.
+                order_num:
+                  type: integer
+                  minimum: 1
+                  description: Display order (must be unique within test)
+                  example: 1
+      responses:
+        '201':
+          description: Question created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Question'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Order number already exists for this test
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tests/{testId}/questions/{questionId}:
+    get:
+      tags: [Questions]
+      summary: Get question details
+      description: Get a single question
+      operationId: getQuestion
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+        - $ref: '#/components/parameters/QuestionId'
+      responses:
+        '200':
+          description: Question retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Question'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags: [Questions]
+      summary: Update question
+      description: Update question text, expected answer, or order (creators only)
+      operationId: updateQuestion
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+        - $ref: '#/components/parameters/QuestionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 10000
+                expected_answer:
+                  type: string
+                  minLength: 1
+                  maxLength: 10000
+                order_num:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Question updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Question'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Order number already exists for this test
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Questions]
+      summary: Delete question
+      description: Delete question from test (creators only)
+      operationId: deleteQuestion
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+        - $ref: '#/components/parameters/QuestionId'
+      responses:
+        '204':
+          description: Question deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # SUBMISSION ENDPOINTS (Participant)
+  # ============================================================================
+
+  /submissions/access:
+    post:
+      tags: [Submissions]
+      summary: Request test access token
+      description: Send access token to participant's email for taking a test (FR-006)
+      operationId: requestTestAccess
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [test_id, email]
+              properties:
+                test_id:
+                  type: string
+                  format: uuid
+                  example: 123e4567-e89b-12d3-a456-426614174000
+                email:
+                  type: string
+                  format: email
+                  example: participant@example.com
+      responses:
+        '202':
+          description: Access token sent to email
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Access link sent to your email
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Test not found or not published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Retakes not allowed and user already submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /submissions:
+    post:
+      tags: [Submissions]
+      summary: Submit test answers
+      description: Participant submits answers for a test using access token
+      operationId: submitTest
+      security:
+        - AccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [access_token, answers]
+              properties:
+                access_token:
+                  type: string
+                  description: Token from access email
+                  example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                answers:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [question_id, text]
+                    properties:
+                      question_id:
+                        type: string
+                        format: uuid
+                      text:
+                        type: string
+                        minLength: 1
+                        maxLength: 50000
+                        description: Essay answer text
+      responses:
+        '201':
+          description: Submission created successfully (AI scoring queued)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionWithAnswers'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Retakes not allowed or missing required answers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /submissions/{submissionId}:
+    get:
+      tags: [Submissions]
+      summary: Get submission results
+      description: |
+        Get submission with answers and scores.
+        - Creators: Can view submissions for their tests
+        - Reviewers: Can view all submissions
+        - Participants: Can view using access token
+      operationId: getSubmission
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+        - name: access_token
+          in: query
+          schema:
+            type: string
+          description: Optional access token for participant viewing
+      responses:
+        '200':
+          description: Submission retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionWithReviews'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tests/{testId}/submissions:
+    get:
+      tags: [Submissions]
+      summary: List test submissions
+      description: |
+        List all submissions for a test.
+        - Creators: Only for their own tests
+        - Reviewers: For all published tests
+      operationId: listSubmissions
+      parameters:
+        - $ref: '#/components/parameters/TestId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Submissions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submissions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubmissionSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================================================
+  # REVIEW ENDPOINTS
+  # ============================================================================
+
+  /reviews/{answerId}:
+    put:
+      tags: [Reviews]
+      summary: Add/update manual review
+      description: Reviewer adds or updates manual score and feedback for an answer (FR-020)
+      operationId: reviewAnswer
+      parameters:
+        - name: answerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Answer ID to review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [manual_score]
+              properties:
+                manual_score:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 100
+                  example: 85.5
+                manual_feedback:
+                  type: string
+                  maxLength: 10000
+                  example: Excellent work! Minor grammar issues on paragraph 3.
+      responses:
+        '200':
+          description: Review updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Only reviewers can add manual reviews
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      tags: [Reviews]
+      summary: Get review for answer
+      description: Get AI and manual review for a specific answer
+      operationId: getReview
+      parameters:
+        - name: answerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Review retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Answer or review not found (review may not exist yet)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+# ==============================================================================
+# COMPONENTS
+# ==============================================================================
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for authenticated users (creators/reviewers)
+    
+    AccessToken:
+      type: apiKey
+      in: header
+      name: X-Access-Token
+      description: Participant access token from email (for submissions)
+
+  parameters:
+    TestId:
+      name: testId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Test UUID
+
+    QuestionId:
+      name: questionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Question UUID
+
+    SubmissionId:
+      name: submissionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Submission UUID
+
+  schemas:
+    # ================================================================
+    # DOMAIN ENTITIES
+    # ================================================================
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        email:
+          type: string
+          format: email
+          example: creator@example.com
+        role:
+          type: string
+          enum: [creator, reviewer]
+          example: creator
+        created_at:
+          type: string
+          format: date-time
+          example:  2026-03-26T10:30:00Z
+
+    Test:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        creator_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Essay Writing 101
+        description:
+          type: string
+          example: Write thoughtful essays on programming concepts
+        allow_retakes:
+          type: boolean
+          example: false
+        is_published:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TestSummary:
+      type: object
+      description: Lightweight test representation for list views
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        is_published:
+          type: boolean
+        question_count:
+          type: integer
+          description: Number of questions in test
+        submission_count:
+          type: integer
+          description: Number of submissions received
+        created_at:
+          type: string
+          format: date-time
+
+    TestWithQuestions:
+      allOf:
+        - $ref: '#/components/schemas/Test'
+        - type: object
+          properties:
+            questions:
+              type: array
+              items:
+                $ref: '#/components/schemas/Question'
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        test_id:
+          type: string
+          format: uuid
+        text:
+          type: string
+          example: What are the key principles of Clean Architecture?
+        expected_answer:
+          type: string
+          description: Expected answer or rubric (only visible to creators/reviewers)
+          example: Clean Architecture emphasizes separation of concerns...
+        order_num:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+
+    Submission:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        test_id:
+          type: string
+          format: uuid
+        access_email:
+          type: string
+          format: email
+          description: Participant email (visible to creators/reviewers only)
+        submitted_at:
+          type: string
+          format: date-time
+        ai_total_score:
+          type: number
+          format: float
+          nullable: true
+          description: Sum of AI scores (null if not yet scored)
+          example: 163.5
+        manual_total_score:
+          type: number
+          format: float
+          nullable: true
+          description: Sum of manual scores (null if not yet reviewed)
+          example: 180.0
+
+    SubmissionSummary:
+      type: object
+      description: Lightweight submission representation for list views
+      properties:
+        id:
+          type: string
+          format: uuid
+        access_email:
+          type: string
+          format: email
+        submitted_at:
+          type: string
+          format: date-time
+        ai_total_score:
+          type: number
+          format: float
+          nullable: true
+        manual_total_score:
+          type: number
+          format: float
+          nullable: true
+        answer_count:
+          type: integer
+
+    SubmissionWithAnswers:
+      allOf:
+        - $ref: '#/components/schemas/Submission'
+        - type: object
+          properties:
+            answers:
+              type: array
+              items:
+                $ref: '#/components/schemas/Answer'
+
+    SubmissionWithReviews:
+      allOf:
+        - $ref: '#/components/schemas/Submission'
+        - type: object
+          properties:
+            answers:
+              type: array
+              items:
+                $ref: '#/components/schemas/AnswerWithReview'
+
+    Answer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        submission_id:
+          type: string
+          format: uuid
+        question_id:
+          type: string
+          format: uuid
+        text:
+          type: string
+          description: Participant's essay answer
+          example: Clean Architecture is a software design philosophy...
+        created_at:
+          type: string
+          format: date-time
+
+    AnswerWithReview:
+      allOf:
+        - $ref: '#/components/schemas/Answer'
+        - type: object
+          properties:
+            question:
+              $ref: '#/components/schemas/Question'
+            review:
+              $ref: '#/components/schemas/Review'
+              nullable: true
+              description: Review (null if not yet scored)
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        answer_id:
+          type: string
+          format: uuid
+        reviewer_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Reviewer who added manual score (null if AI-only)
+        ai_score:
+          type: number
+          format: float
+          nullable: true
+          minimum: 0
+          maximum: 100
+          example: 85.5
+        ai_feedback:
+          type: string
+          nullable: true
+          example: Good explanation of separation of concerns. Could elaborate more on dependency inversion.
+        ai_scored_at:
+          type: string
+          format: date-time
+          nullable: true
+        manual_score:
+          type: number
+          format: float
+          nullable: true
+          minimum: 0
+          maximum: 100
+          example: 90.0
+        manual_feedback:
+          type: string
+          nullable: true
+          example: Excellent work! Minor grammar issues on paragraph 3.
+        manual_scored_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ================================================================
+    # UTILITY SCHEMAS
+    # ================================================================
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_items:
+          type: integer
+          example: 156
+        total_pages:
+          type: integer
+          example: 8
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: Invalid email format
+        code:
+          type: string
+          description: Error code for client handling
+          example: VALIDATION_ERROR
+        details:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid request (validation error)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Validation failed
+            code: VALIDATION_ERROR
+            details:
+              email: Invalid email format
+
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid or expired token
+            code: UNAUTHORIZED
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: You do not have permission to access this resource
+            code: FORBIDDEN
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Test not found
+            code: NOT_FOUND
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: An unexpected error occurred
+            code: INTERNAL_ERROR
