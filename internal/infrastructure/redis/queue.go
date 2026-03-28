@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -13,6 +15,7 @@ import (
 type QueueClient struct {
 	client     *redis.Client
 	streamName string
+	logger     *slog.Logger
 }
 
 // Job represents a job in the queue
@@ -24,10 +27,14 @@ type Job struct {
 }
 
 // NewQueueClient creates a new Redis queue client
-func NewQueueClient(client *redis.Client, streamName string) *QueueClient {
+func NewQueueClient(client *redis.Client, streamName string, logger *slog.Logger) *QueueClient {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &QueueClient{
 		client:     client,
 		streamName: streamName,
+		logger:     logger,
 	}
 }
 
@@ -70,17 +77,14 @@ func (q *QueueClient) Dequeue(ctx context.Context, streamName, groupName, consum
 	var jobs []Job
 	for _, stream := range streams {
 		for _, message := range stream.Messages {
-			jobType, _ := message.Values["type"].(string)
-			payloadStr, _ := message.Values["payload"].(string)
-			createdAtInt, _ := message.Values["created_at"].(string)
-
-			var createdAt time.Time
-			if createdAtInt != "" {
-				var ts int64
-				if _, err := fmt.Sscanf(createdAtInt, "%d", &ts); err == nil {
-					createdAt = time.Unix(ts, 0)
-				}
-			}
+			// Extract job type (handle string or []byte)
+			jobType := q.extractString(message.Values["type"], message.ID, "type")
+			
+			// Extract payload (handle string or []byte)
+			payloadStr := q.extractString(message.Values["payload"], message.ID, "payload")
+			
+			// Extract created_at timestamp (handle int64, string, or []byte)
+			createdAt := q.extractTimestamp(message.Values["created_at"], message.ID)
 
 			jobs = append(jobs, Job{
 				ID:        message.ID,
@@ -111,4 +115,79 @@ func (q *QueueClient) CreateConsumerGroup(ctx context.Context, streamName, group
 		return err
 	}
 	return nil
+}
+
+// extractString safely extracts a string value from Redis message values
+// Handles string, []byte, and other types with logging
+func (q *QueueClient) extractString(value interface{}, messageID, fieldName string) string {
+	if value == nil {
+		q.logger.Warn("redis message field is nil",
+			"message_id", messageID,
+			"field", fieldName)
+		return ""
+	}
+
+	switch v := value.(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	default:
+		q.logger.Error("unexpected type for redis message field",
+			"message_id", messageID,
+			"field", fieldName,
+			"type", fmt.Sprintf("%T", v),
+			"value", v)
+		return fmt.Sprintf("%v", v) // Fallback to string conversion
+	}
+}
+
+// extractTimestamp safely extracts a Unix timestamp from Redis message values
+// Handles int64, string, []byte with proper type conversion and logging
+func (q *QueueClient) extractTimestamp(value interface{}, messageID string) time.Time {
+	if value == nil {
+		q.logger.Warn("redis message created_at field is nil",
+			"message_id", messageID)
+		return time.Time{} // Zero time
+	}
+
+	var ts int64
+	var err error
+
+	switch v := value.(type) {
+	case int64:
+		// Direct int64 from Redis
+		ts = v
+	case string:
+		// String representation of integer
+		ts, err = strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			q.logger.Error("failed to parse created_at string as int64",
+				"message_id", messageID,
+				"value", v,
+				"error", err)
+			return time.Time{}
+		}
+	case []byte:
+		// Byte slice representation
+		ts, err = strconv.ParseInt(string(v), 10, 64)
+		if err != nil {
+			q.logger.Error("failed to parse created_at bytes as int64",
+				"message_id", messageID,
+				"value", string(v),
+				"error", err)
+			return time.Time{}
+		}
+	case int:
+		// int type (less common but possible)
+		ts = int64(v)
+	default:
+		q.logger.Error("unexpected type for created_at field",
+			"message_id", messageID,
+			"type", fmt.Sprintf("%T", v),
+			"value", v)
+		return time.Time{}
+	}
+
+	return time.Unix(ts, 0)
 }

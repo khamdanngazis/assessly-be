@@ -82,7 +82,7 @@ func main() {
 	reviewRepo := postgres.NewReviewRepository(db.Pool)
 	
 	// Initialize queue for AI scoring
-	queueClient := redis.NewQueueClient(redisClient.Redis, "submissions")
+	queueClient := redis.NewQueueClient(redisClient.Redis, "submissions", slog.Default())
 	queueAdapter := redis.NewSubmissionQueueAdapter(queueClient)
 	
 	// Initialize auth use cases
@@ -184,6 +184,7 @@ func main() {
 		submissionHandler,
 		reviewHandler,
 		jwtMiddleware,
+		slog.Default(),
 	)
 	
 	// Create HTTP server

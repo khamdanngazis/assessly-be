@@ -63,7 +63,7 @@ func main() {
 	groqAdapter := groq.NewScorerAdapter(groqClient)
 
 	// Initialize Redis queue
-	queueClient := redis.NewQueueClient(redisClient.Redis, "submissions")
+	queueClient := redis.NewQueueClient(redisClient.Redis, "submissions", slog.Default())
 	queueAdapter := redis.NewQueueConsumerAdapter(queueClient, "submissions")
 
 	// Initialize scoring use case

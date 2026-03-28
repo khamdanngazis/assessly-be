@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/assessly/assessly-be/internal/delivery/http/handler"
+	"github.com/assessly/assessly-be/internal/delivery/http/middleware"
 	"github.com/assessly/assessly-be/internal/domain"
 	testUC "github.com/assessly/assessly-be/internal/usecase/test"
 	"github.com/go-chi/chi/v5"
@@ -51,7 +52,7 @@ func TestCreateTestContract(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		
 		// Add user_id to context (simulating JWT middleware)
-		ctx := context.WithValue(req.Context(), "user_id", creatorID.String())
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
 		req = req.WithContext(ctx)
 		
 		w := httptest.NewRecorder()
@@ -100,7 +101,7 @@ func TestCreateTestContract(t *testing.T) {
 	t.Run("should return 400 on invalid JSON body", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests", bytes.NewReader([]byte("invalid json")))
 		req.Header.Set("Content-Type", "application/json")
-		ctx := context.WithValue(req.Context(), "user_id", uuid.New().String())
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, uuid.New().String())
 		req = req.WithContext(ctx)
 		w := httptest.NewRecorder()
 
@@ -147,7 +148,7 @@ func TestCreateTestContract(t *testing.T) {
 		reqJSON, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests", bytes.NewReader(reqJSON))
 		req.Header.Set("Content-Type", "application/json")
-		ctx := context.WithValue(req.Context(), "user_id", creatorID.String())
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
 		req = req.WithContext(ctx)
 		w := httptest.NewRecorder()
 

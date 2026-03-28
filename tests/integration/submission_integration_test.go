@@ -235,6 +235,7 @@ func TestSubmission_GenerateTokenSubmitRetrieve(t *testing.T) {
 		req := submissionUC.GetSubmissionRequest{
 			SubmissionID: submissionID,
 			UserID:       &creator.ID,
+			UserRole:     "creator",
 		}
 
 		resp, err := getSubmissionUC.Execute(ctx, req)

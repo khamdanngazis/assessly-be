@@ -1,8 +1,10 @@
 package router
 
 import (
+	"log/slog"
 	"net/http"
 
+	"github.com/assessly/assessly-be/internal/delivery/http/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -46,6 +48,7 @@ func (r *Router) SetupRoutes(
 		HandleListSubmissions(w http.ResponseWriter, r *http.Request)
 	},
 	jwtMiddleware func(next http.Handler) http.Handler,
+	logger *slog.Logger,
 ) {
 	// Health check endpoint (no auth required)
 	r.Get("/health", healthHandler)
@@ -93,39 +96,51 @@ func (r *Router) SetupRoutes(
 				r.Use(jwtMiddleware)
 			}
 
-			// Test creator endpoints
+			// Test creator endpoints (requires creator role)
 			r.Route("/tests", func(r chi.Router) {
-				r.Get("/", notImplementedHandler)
-				if testHandler != nil {
-					r.Post("/", testHandler.CreateTest)
-					r.Post("/{testID}/publish", testHandler.PublishTest)
-				} else {
-					r.Post("/", notImplementedHandler)
-					r.Post("/{testID}/publish", notImplementedHandler)
-				}
-				r.Get("/{testID}", notImplementedHandler)
-				r.Put("/{testID}", notImplementedHandler)
-				r.Delete("/{testID}", notImplementedHandler)
+				// Creator-only routes
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireRole("creator", logger))
 
-				// Questions
-				if questionHandler != nil {
-					r.Post("/{testID}/questions", questionHandler.AddQuestion)
-				} else {
-					r.Post("/{testID}/questions", notImplementedHandler)
-				}
-				r.Put("/{testID}/questions/{questionID}", notImplementedHandler)
-				r.Delete("/{testID}/questions/{questionID}", notImplementedHandler)
+					r.Get("/", notImplementedHandler)
+					if testHandler != nil {
+						r.Post("/", testHandler.CreateTest)
+						r.Post("/{testID}/publish", testHandler.PublishTest)
+					} else {
+						r.Post("/", notImplementedHandler)
+						r.Post("/{testID}/publish", notImplementedHandler)
+					}
+					r.Get("/{testID}", notImplementedHandler)
+					r.Put("/{testID}", notImplementedHandler)
+					r.Delete("/{testID}", notImplementedHandler)
 
-				// T089: Submissions list for reviewers
-				if reviewHandler != nil {
-					r.Get("/{testId}/submissions", reviewHandler.HandleListSubmissions)
-				} else {
-					r.Get("/{testId}/submissions", notImplementedHandler)
-				}
+					// Questions
+					if questionHandler != nil {
+						r.Post("/{testID}/questions", questionHandler.AddQuestion)
+					} else {
+						r.Post("/{testID}/questions", notImplementedHandler)
+					}
+					r.Put("/{testID}/questions/{questionID}", notImplementedHandler)
+					r.Delete("/{testID}/questions/{questionID}", notImplementedHandler)
+				})
+
+				// Reviewer-only routes
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireRole("reviewer", logger))
+
+					// T089: Submissions list for reviewers
+					if reviewHandler != nil {
+						r.Get("/{testId}/submissions", reviewHandler.HandleListSubmissions)
+					} else {
+						r.Get("/{testId}/submissions", notImplementedHandler)
+					}
+				})
 			})
 
 			// T089: Review endpoints (requires reviewer role)
 			r.Route("/reviews", func(r chi.Router) {
+				r.Use(middleware.RequireRole("reviewer", logger))
+
 				if reviewHandler != nil {
 					r.Put("/{answerId}", reviewHandler.HandleAddManualReview)
 					r.Get("/{answerId}", reviewHandler.HandleGetReview)

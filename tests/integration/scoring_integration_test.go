@@ -54,7 +54,7 @@ func TestScoringWorkerIntegration(t *testing.T) {
 	require.NoError(t, err, "failed to connect to Redis")
 
 	// Setup queue
-	queueClient := redisInfra.NewQueueClient(redisClient, "assessly:scoring")
+	queueClient := redisInfra.NewQueueClient(redisClient, "assessly:scoring", slog.Default())
 	streamName := "assessly:scoring"
 
 	// Setup mock AI scorer
@@ -232,8 +232,8 @@ func TestScoringWorkerIntegration(t *testing.T) {
 		updatedSubmission, err := submissionRepo.FindByID(ctx, submission.ID)
 		require.NoError(t, err)
 		assert.NotNil(t, updatedSubmission.AITotalScore, "AI total score should be set")
-		expectedTotal := 75.0 // (100 + 50) / 2
-		assert.Equal(t, expectedTotal, *updatedSubmission.AITotalScore, "AI total score should be average of answer scores")
+		expectedTotal := 150.0 // Sum: 100 + 50
+		assert.Equal(t, expectedTotal, *updatedSubmission.AITotalScore, "AI total score should be sum of answer scores")
 
 		// === CLEANUP ===
 		// Delete in reverse order of foreign keys using direct SQL

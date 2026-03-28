@@ -159,30 +159,3 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 
 	return nil
 }
-
-// isPgUniqueViolation checks if error is a PostgreSQL unique constraint violation
-func isPgUniqueViolation(err error) bool {
-	// Check if it's a pgconn.PgError and the code is 23505 (unique_violation)
-	if err == nil {
-		return false
-	}
-	// Note: The actual implementation would check the error code
-	// For now, we check the error string contains "duplicate" or "unique"
-	errStr := err.Error()
-	return contains(errStr, "duplicate") || contains(errStr, "unique")
-}
-
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

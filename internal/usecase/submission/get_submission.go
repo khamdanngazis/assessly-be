@@ -14,6 +14,7 @@ type GetSubmissionRequest struct {
 	// Either access token (for participant) or user ID (for reviewer/creator)
 	AccessToken string
 	UserID      *uuid.UUID
+	UserRole    string // "creator" or "reviewer"
 }
 
 // GetSubmissionResponse holds the submission with answers and reviews
@@ -72,12 +73,22 @@ func (uc *GetSubmissionUseCase) Execute(ctx context.Context, req GetSubmissionRe
 	// Check if authenticated user (reviewer/creator)
 	if req.UserID != nil {
 		// Reviewers can see all submissions
-		// Creators can see submissions for their tests
-		test, err := uc.testRepo.FindByID(ctx, submission.TestID)
-		if err == nil && test.CreatorID == *req.UserID {
+		if req.UserRole == "reviewer" {
 			authorized = true
+			uc.logger.Info("reviewer accessing submission",
+				"user_id", req.UserID,
+				"submission_id", req.SubmissionID)
+		} else if req.UserRole == "creator" {
+			// Creators can see submissions for their tests
+			test, err := uc.testRepo.FindByID(ctx, submission.TestID)
+			if err == nil && test.CreatorID == *req.UserID {
+				authorized = true
+				uc.logger.Info("creator accessing own test submission",
+					"user_id", req.UserID,
+					"test_id", submission.TestID,
+					"submission_id", req.SubmissionID)
+			}
 		}
-		// TODO: Check if user is a reviewer (would need UserRepository)
 	}
 
 	// Check if participant with valid access token

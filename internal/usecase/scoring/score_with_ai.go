@@ -133,15 +133,14 @@ func (uc *ScoreWithAIUseCase) Execute(ctx context.Context, req ScoreWithAIReques
 		)
 	}
 
-	// Calculate average score and update submission
+	// Update submission with total AI score (sum of all answer scores)
 	if scoredCount > 0 {
-		avgScore := totalScore / float64(scoredCount)
-		submission.AITotalScore = &avgScore
+		submission.AITotalScore = &totalScore
 
 		if err := uc.submissionRepo.Update(ctx, submission); err != nil {
 			uc.logger.Error("failed to update submission with AI score",
 				"submission_id", req.SubmissionID,
-				"score", avgScore,
+				"total_score", totalScore,
 				"error", err,
 			)
 			metrics.AIScoringTotal.WithLabelValues("error").Inc()
@@ -154,7 +153,7 @@ func (uc *ScoreWithAIUseCase) Execute(ctx context.Context, req ScoreWithAIReques
 
 		uc.logger.Info("submission scored with AI",
 			"submission_id", req.SubmissionID,
-			"avg_score", avgScore,
+			"total_score", totalScore,
 			"scored_answers", scoredCount,
 			"total_answers", len(answers),
 		)

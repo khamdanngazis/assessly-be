@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/assessly/assessly-be/internal/delivery/http/handler"
+	"github.com/assessly/assessly-be/internal/delivery/http/middleware"
 	"github.com/assessly/assessly-be/internal/domain"
 	submissionUC "github.com/assessly/assessly-be/internal/usecase/submission"
 	"github.com/go-chi/chi/v5"
@@ -219,9 +220,10 @@ func TestGetSubmissionContract(t *testing.T) {
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", submissionID.String())
 		ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-		// Add user_id to context (simulate reviewer access)
+		// Add user_id and user_role to context (simulate creator access)
 		creatorID := uuid.New()
-		ctx = context.WithValue(ctx, "user_id", creatorID)
+		ctx = context.WithValue(ctx, middleware.UserIDKey, creatorID.String())
+		ctx = context.WithValue(ctx, middleware.UserRoleKey, "creator")
 		req = req.WithContext(ctx)
 		
 		// Update mockTestRepo to return test with matching creator

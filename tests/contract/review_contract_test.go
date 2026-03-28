@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/assessly/assessly-be/internal/delivery/http/handler"
+	"github.com/assessly/assessly-be/internal/delivery/http/middleware"
 	"github.com/assessly/assessly-be/internal/domain"
 	reviewUC "github.com/assessly/assessly-be/internal/usecase/review"
 	"github.com/go-chi/chi/v5"
@@ -97,7 +98,7 @@ func TestAddManualReviewContract(t *testing.T) {
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("answerId", answerID.String())
 		ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-		ctx = context.WithValue(ctx, "user_id", reviewerID)
+		ctx = context.WithValue(ctx, middleware.UserIDKey, reviewerID.String())
 		req = req.WithContext(ctx)
 
 		w := httptest.NewRecorder()
@@ -138,7 +139,7 @@ func TestAddManualReviewContract(t *testing.T) {
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("answerId", answerID.String())
 		ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-		ctx = context.WithValue(ctx, "user_id", reviewerID)
+		ctx = context.WithValue(ctx, middleware.UserIDKey, reviewerID.String())
 		req = req.WithContext(ctx)
 
 		w := httptest.NewRecorder()
@@ -168,7 +169,7 @@ func TestAddManualReviewContract(t *testing.T) {
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("answerId", "invalid-uuid")
 		ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-		ctx = context.WithValue(ctx, "user_id", reviewerID)
+		ctx = context.WithValue(ctx, middleware.UserIDKey, reviewerID.String())
 		req = req.WithContext(ctx)
 
 		w := httptest.NewRecorder()

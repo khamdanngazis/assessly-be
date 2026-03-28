@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/assessly/assessly-be/internal/delivery/http/middleware"
 	"github.com/assessly/assessly-be/internal/domain"
 	"github.com/assessly/assessly-be/internal/usecase/submission"
 	"github.com/go-chi/chi/v5"
@@ -170,10 +171,16 @@ func (h *Handler) GetSubmission(w http.ResponseWriter, r *http.Request) {
 
 	// Get user ID from context (if authenticated)
 	var userID *uuid.UUID
-	if userIDValue := r.Context().Value("user_id"); userIDValue != nil {
-		if uid, ok := userIDValue.(uuid.UUID); ok {
+	var userRole string
+	if userIDStr, ok := middleware.GetUserID(r.Context()); ok {
+		if uid, err := uuid.Parse(userIDStr); err == nil {
 			userID = &uid
 		}
+	}
+
+	// Get user role from context (if authenticated)
+	if role, ok := middleware.GetUserRole(r.Context()); ok {
+		userRole = role
 	}
 
 	// Execute use case
@@ -181,6 +188,7 @@ func (h *Handler) GetSubmission(w http.ResponseWriter, r *http.Request) {
 		SubmissionID: submissionID,
 		AccessToken:  accessToken,
 		UserID:       userID,
+		UserRole:     userRole,
 	}
 
 	result, err := h.getSubmissionUC.Execute(r.Context(), ucReq)

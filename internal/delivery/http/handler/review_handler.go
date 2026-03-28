@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/assessly/assessly-be/internal/delivery/http/middleware"
 	"github.com/assessly/assessly-be/internal/usecase/review"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -51,9 +52,15 @@ func (h *ReviewHandler) HandleAddManualReview(w http.ResponseWriter, r *http.Req
 	}
 
 	// Get reviewer ID from context (set by auth middleware)
-	reviewerID, ok := r.Context().Value("user_id").(uuid.UUID)
+	reviewerIDStr, ok := middleware.GetUserID(r.Context())
 	if !ok {
 		h.respondError(w, http.StatusUnauthorized, "reviewer ID not found")
+		return
+	}
+
+	reviewerID, err := uuid.Parse(reviewerIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "invalid reviewer ID")
 		return
 	}
 

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/assessly/assessly-be/internal/delivery/http/middleware"
 	"github.com/assessly/assessly-be/internal/domain"
 	"github.com/assessly/assessly-be/internal/usecase/test"
 	"github.com/go-chi/chi/v5"
@@ -59,13 +60,13 @@ func (h *TestHandler) CreateTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get creator ID from context (set by JWT middleware)
-	creatorIDStr := r.Context().Value("user_id")
-	if creatorIDStr == nil {
+	creatorIDStr, ok := middleware.GetUserID(r.Context())
+	if !ok {
 		h.respondError(w, http.StatusUnauthorized, "user not authenticated")
 		return
 	}
 
-	creatorID, err := uuid.Parse(creatorIDStr.(string))
+	creatorID, err := uuid.Parse(creatorIDStr)
 	if err != nil {
 		h.respondError(w, http.StatusUnauthorized, "invalid user ID")
 		return

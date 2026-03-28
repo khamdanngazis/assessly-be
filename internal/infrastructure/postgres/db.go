@@ -2,11 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/assessly/assessly-be/internal/infrastructure/config"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -65,4 +67,17 @@ func (db *DB) Close() {
 // Health checks if database is healthy
 func (db *DB) Health(ctx context.Context) error {
 	return db.Pool.Ping(ctx)
+}
+
+// isPgUniqueViolation checks if the error is a PostgreSQL unique constraint violation
+func isPgUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		// 23505 = unique_violation (SQLSTATE code)
+		return pgErr.Code == "23505"
+	}
+	return false
 }

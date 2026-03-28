@@ -177,15 +177,15 @@
 
 ### Implementation for User Story 3
 
-- [ ] T075 [P] [US3] Implement ReviewRepository in internal/infrastructure/postgres/review_repository.go (Create, FindByAnswerID, Update, UpsertAIScore methods)
-- [ ] T076 [P] [US3] Create Redis queue client in internal/infrastructure/redis/queue.go with Enqueue/Dequeue methods using XADD/XREADGROUP per research.md TD-001
-- [ ] T077 [P] [US3] Create Groq AI client in internal/infrastructure/groq/client.go with ScoreAnswer(question, expected, answer) method per research.md TD-006
-- [ ] T078 [US3] Create QueueAIScoring use case in internal/usecase/scoring/queue_scoring.go (enqueues submission_id to Redis after submission) - depends on T076
-- [ ] T079 [US3] Create ScoreWithAI use case in internal/usecase/scoring/score_with_ai.go (calls Groq API, stores ai_score/ai_feedback, updates submission total) - depends on T075, T077
-- [ ] T080 [US3] Modify SubmitTest use case to call QueueAIScoring after creating submission - update internal/usecase/submission/submit_test.go
-- [ ] T081 [US3] Create worker consumer in internal/delivery/worker/scoring_consumer.go that dequeues from Redis and calls ScoreWithAI use case
-- [ ] T082 [US3] Create worker entrypoint in cmd/worker/main.go with graceful shutdown
-- [ ] T083 [US3] Update GetSubmission use case to include reviews with AI scores in response
+- [X] T075 [P] [US3] Implement ReviewRepository in internal/infrastructure/postgres/review_repository.go (Create, FindByAnswerID, Update, UpsertAIScore methods)
+- [X] T076 [P] [US3] Create Redis queue client in internal/infrastructure/redis/queue.go with Enqueue/Dequeue methods using XADD/XREADGROUP per research.md TD-001
+- [X] T077 [P] [US3] Create Groq AI client in internal/infrastructure/groq/client.go with ScoreAnswer(question, expected, answer) method per research.md TD-006
+- [X] T078 [US3] Create QueueAIScoring use case in internal/usecase/scoring/queue_scoring.go (enqueues submission_id to Redis after submission) - depends on T076
+- [X] T079 [US3] Create ScoreWithAI use case in internal/usecase/scoring/score_with_ai.go (calls Groq API, stores ai_score/ai_feedback, updates submission total) - depends on T075, T077
+- [X] T080 [US3] Modify SubmitTest use case to call QueueAIScoring after creating submission - update internal/usecase/submission/submit_test.go
+- [X] T081 [US3] Create worker consumer in internal/delivery/worker/scoring_consumer.go that dequeues from Redis and calls ScoreWithAI use case
+- [X] T082 [US3] Create worker entrypoint in cmd/worker/main.go with graceful shutdown
+- [X] T083 [US3] Update GetSubmission use case to include reviews with AI scores in response
 
 **Checkpoint**: AI scoring operational. Submissions automatically queued and scored asynchronously.
 
@@ -199,13 +199,13 @@
 
 ### Implementation for User Story 4
 
-- [ ] T084 [US4] Create ListSubmissions use case in internal/usecase/review/list_submissions.go (filters by test_id, accessible to all reviewers)
-- [ ] T085 [US4] Create AddManualReview use case in internal/usecase/review/add_manual_review.go (validates reviewer role, upserts manual_score/manual_feedback, updates submission total) - depends on T075
-- [ ] T086 [US4] Create GetReview use case in internal/usecase/review/get_review.go (returns review with AI and manual scores for an answer)
-- [ ] T087 [US4] Create review handlers in internal/delivery/http/review_handler.go with PUT /api/v1/reviews/:answerId, GET /api/v1/reviews/:answerId per openapi.yaml
-- [ ] T088 [US4] Create submission list handler: GET /api/v1/tests/:testId/submissions in internal/delivery/http/submission_handler.go
-- [ ] T089 [US4] Add review routes to router with JWT auth middleware (requires reviewer role)
-- [ ] T090 [US4] Update GetSubmission response to prioritize manual_score over ai_score when displaying results
+- [X] T084 [US4] Create ListSubmissions use case in internal/usecase/review/list_submissions.go (filters by test_id, accessible to all reviewers)
+- [X] T085 [US4] Create AddManualReview use case in internal/usecase/review/add_manual_review.go (validates reviewer role, upserts manual_score/manual_feedback, updates submission total) - depends on T075
+- [X] T086 [US4] Create GetReview use case in internal/usecase/review/get_review.go (returns review with AI and manual scores for an answer)
+- [X] T087 [US4] Create review handlers in internal/delivery/http/review_handler.go with PUT /api/v1/reviews/:answerId, GET /api/v1/reviews/:answerId per openapi.yaml
+- [X] T088 [US4] Create submission list handler: GET /api/v1/tests/:testId/submissions in internal/delivery/http/submission_handler.go
+- [X] T089 [US4] Add review routes to router with JWT auth middleware (requires reviewer role)
+- [X] T090 [US4] Update GetSubmission response to prioritize manual_score over ai_score when displaying results
 
 **Checkpoint**: Manual review complete. Reviewers can oversee and adjust AI assessments.
 
@@ -217,13 +217,13 @@
 
 ### Unit Tests (80%+ coverage for domain/usecase)
 
-- [ ] T091 [P] Write unit tests for all auth use cases in tests/unit/auth_test.go
-- [ ] T092 [P] Write unit tests for all test management use cases in tests/unit/test_test.go
-- [ ] T093 [P] Write unit tests for all submission use cases in tests/unit/submission_test.go
-- [ ] T094 [P] Write unit tests for all scoring use cases in tests/unit/scoring_test.go
-- [ ] T095 [P] Write unit tests for all review use cases in tests/unit/review_test.go
-- [ ] T096 [P] Write unit tests for JWT service in tests/unit/jwt_test.go
-- [ ] T097 [P] Write unit tests for password hasher in tests/unit/password_test.go
+- [X] T091 [P] Write unit tests for all auth use cases in tests/unit/auth_test.go
+- [X] T092 [P] Write unit tests for all test management use cases in tests/unit/test_test.go
+- [X] T093 [P] Write unit tests for all submission use cases in tests/unit/submission_test.go
+- [X] T094 [P] Write unit tests for all scoring use cases in tests/unit/scoring_test.go
+- [X] T095 [P] Write unit tests for all review use cases in tests/unit/review_test.go
+- [X] T096 [P] Write unit tests for JWT service in tests/unit/jwt_test.go
+- [X] T097 [P] Write unit tests for password hasher in tests/unit/password_test.go
 
 ### Integration Tests (testcontainers for DB/Redis)
 
@@ -253,11 +253,11 @@
 
 ### Observability & Monitoring
 
-- [ ] T115 [P] Add Prometheus metrics endpoint in internal/delivery/http/metrics_handler.go (GET /metrics)
-- [ ] T116 [P] Add request duration metrics in logging middleware
-- [ ] T117 [P] Add error rate metrics in error handling middleware
-- [ ] T118 [P] Add AI scoring duration metrics in scoring use case
-- [ ] T119 [P] Add Redis queue depth metrics in worker consumer
+- [X] T115 [P] Add Prometheus metrics endpoint in internal/delivery/http/metrics_handler.go (GET /metrics)
+- [X] T116 [P] Add request duration metrics in logging middleware
+- [X] T117 [P] Add error rate metrics in error handling middleware
+- [X] T118 [P] Add AI scoring duration metrics in scoring use case
+- [X] T119 [P] Add Redis queue depth metrics in worker consumer
 - [ ] T120 [P] Configure OpenTelemetry tracing in cmd/api/main.go and cmd/worker/main.go per plan.md
 
 ### Documentation & Polish
@@ -268,7 +268,7 @@
 - [ ] T124 [P] Create ADR for AI integration in docs/adr/003-groq-integration.md
 - [ ] T125 [P] Update README.md with architecture diagram and getting started guide
 - [ ] T126 Validate all success criteria from spec.md (SC-001 through SC-010)
-- [ ] T127 Run full test suite and verify 70%+ coverage (`go test -cover ./...`)
+- [X] T127 Run full test suite and verify 70%+ coverage (`go test -cover ./...`)
 
 ---
 

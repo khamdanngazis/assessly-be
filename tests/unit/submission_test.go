@@ -487,6 +487,7 @@ func TestGetSubmission_SuccessWithAccessToken(t *testing.T) {
 		SubmissionID: submissionID,
 		AccessToken:  "valid-token",
 		UserID:       nil,
+		UserRole:     "", // Participant access via token
 	}
 
 	mockSubmissionRepo.On("FindByID", mock.Anything, submissionID).Return(testSubmission, nil)
@@ -564,6 +565,7 @@ func TestGetSubmission_SuccessWithCreator(t *testing.T) {
 		SubmissionID: submissionID,
 		AccessToken:  "",
 		UserID:       &creatorID,
+		UserRole:     "creator",
 	}
 
 	mockSubmissionRepo.On("FindByID", mock.Anything, submissionID).Return(testSubmission, nil)
@@ -627,6 +629,7 @@ func TestGetSubmission_Unauthorized(t *testing.T) {
 		SubmissionID: submissionID,
 		AccessToken:  "",
 		UserID:       &wrongUserID,
+		UserRole:     "creator", // Wrong creator
 	}
 
 	mockSubmissionRepo.On("FindByID", mock.Anything, submissionID).Return(testSubmission, nil)
@@ -643,4 +646,71 @@ func TestGetSubmission_Unauthorized(t *testing.T) {
 	mockSubmissionRepo.AssertExpectations(t)
 	mockTestRepo.AssertExpectations(t)
 	mockAnswerRepo.AssertNotCalled(t, "FindBySubmissionID")
+}
+
+func TestGetSubmission_SuccessWithReviewer(t *testing.T) {
+	// Arrange
+	mockSubmissionRepo := new(MockSubmissionRepository)
+	mockAnswerRepo := new(MockAnswerRepository)
+	mockReviewRepo := new(MockReviewRepository)
+	mockTestRepo := new(MockTestRepository)
+	mockValidator := new(MockTokenValidator)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := submission.NewGetSubmissionUseCase(
+		mockSubmissionRepo,
+		mockAnswerRepo,
+		mockReviewRepo,
+		mockTestRepo,
+		mockValidator,
+		logger,
+	)
+
+	submissionID := uuid.New()
+	testID := uuid.New()
+	reviewerID := uuid.New()
+	answerID := uuid.New()
+
+	testSubmission := &domain.Submission{
+		ID:          submissionID,
+		TestID:      testID,
+		AccessEmail: "participant@example.com",
+		SubmittedAt: time.Now(),
+	}
+
+	answers := []*domain.Answer{
+		{
+			ID:           answerID,
+			SubmissionID: submissionID,
+			QuestionID:   uuid.New(),
+			Text:         "My answer",
+			CreatedAt:    time.Now(),
+		},
+	}
+
+	req := submission.GetSubmissionRequest{
+		SubmissionID: submissionID,
+		AccessToken:  "",
+		UserID:       &reviewerID,
+		UserRole:     "reviewer",
+	}
+
+	mockSubmissionRepo.On("FindByID", mock.Anything, submissionID).Return(testSubmission, nil)
+	mockAnswerRepo.On("FindBySubmissionID", mock.Anything, submissionID).Return(answers, nil)
+	mockReviewRepo.On("FindByAnswerID", mock.Anything, answerID).
+		Return(nil, domain.ErrNotFound{Resource: "review", ID: answerID.String()})
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, submissionID, result.Submission.ID)
+	assert.Equal(t, 1, len(result.Answers))
+	assert.Equal(t, answerID, result.Answers[0].Answer.ID)
+	mockSubmissionRepo.AssertExpectations(t)
+	mockAnswerRepo.AssertExpectations(t)
+	mockReviewRepo.AssertExpectations(t)
+	// TestRepo should NOT be called for reviewers (they can access all submissions)
+	mockTestRepo.AssertNotCalled(t, "FindByID")
 }

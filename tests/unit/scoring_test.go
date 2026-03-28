@@ -135,7 +135,7 @@ func TestScoreWithAI_Success(t *testing.T) {
 	mockReviewRepo.On("UpsertAIScore", mock.Anything, a1ID, 85.0, "Good answer").Return(nil)
 	mockReviewRepo.On("UpsertAIScore", mock.Anything, a2ID, 90.0, "Excellent answer").Return(nil)
 	mockSubmissionRepo.On("Update", mock.Anything, mock.MatchedBy(func(s *domain.Submission) bool {
-		return s.ID == submissionID && s.AITotalScore != nil && *s.AITotalScore == 87.5 // (85 + 90) / 2
+		return s.ID == submissionID && s.AITotalScore != nil && *s.AITotalScore == 175.0 // Sum: 85 + 90
 	})).Return(nil)
 
 	// Act
