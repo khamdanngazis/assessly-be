@@ -221,28 +221,140 @@ else
     exit 1
 fi
 
-# 9. Get Submission Result (wait a bit for AI scoring)
-echo -e "\n${BLUE}9️⃣ Getting Submission Result${NC}"
-echo "Waiting 3 seconds for AI scoring to process..."
-sleep 3
+# 9. Get Submission Result (wait for AI scoring)
+echo -e "\n${BLUE}9️⃣ Getting Submission Result & AI Scores${NC}"
+echo "Waiting for AI scoring to complete..."
 
-RESULT_RESPONSE=$(curl -s -X GET "$API_URL/api/v1/submissions/$SUBMISSION_ID" \
-  -H "X-Access-Token: $ACCESS_TOKEN")
+# Poll for AI scores (max 30 seconds)
+MAX_RETRIES=6
+RETRY_COUNT=0
+AI_SCORED=false
 
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    sleep 5
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    
+    echo "  Checking attempt $RETRY_COUNT/$MAX_RETRIES..."
+    
+    RESULT_RESPONSE=$(curl -s -X GET "$API_URL/api/v1/submissions/$SUBMISSION_ID" \
+      -H "X-Access-Token: $ACCESS_TOKEN")
+    
+    # Check if any answer has AI score
+    if echo "$RESULT_RESPONSE" | grep -q '"ai_score"'; then
+        AI_SCORED=true
+        break
+    fi
+done
+
+echo ""
 echo "Response: $RESULT_RESPONSE"
+echo ""
 
 if echo "$RESULT_RESPONSE" | grep -q '"answers"'; then
-    echo -e "${GREEN}✅ Submission retrieved${NC}"
+    echo -e "${GREEN}✅ Submission retrieved successfully${NC}"
+    echo ""
     
-    # Check if AI scoring completed
-    if echo "$RESULT_RESPONSE" | grep -q '"ai_score"'; then
-        AI_SCORE=$(echo "$RESULT_RESPONSE" | grep -o '"ai_score":[0-9.]*' | head -1 | cut -d':' -f2)
-        echo -e "${GREEN}🤖 AI Scoring completed! Score: $AI_SCORE${NC}"
+    # Check AI scoring status
+    if [ "$AI_SCORED" = true ]; then
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}🤖 AI SCORING COMPLETED SUCCESSFULLY!${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        
+        # Extract submission scores
+        AI_TOTAL=$(echo "$RESULT_RESPONSE" | grep -o '"ai_total_score":[0-9.]*' | head -1 | cut -d':' -f2)
+        MANUAL_TOTAL=$(echo "$RESULT_RESPONSE" | grep -o '"manual_total_score":[0-9.]*' | head -1 | cut -d':' -f2)
+        
+        if [ -n "$AI_TOTAL" ]; then
+            echo -e "${GREEN}📊 TOTAL SCORE: ${AI_TOTAL}/100${NC}"
+        fi
+        
+        if [ -n "$MANUAL_TOTAL" ]; then
+            echo -e "${BLUE}📝 Manual Review Score: ${MANUAL_TOTAL}/100${NC}"
+        fi
+        
+        echo ""
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BLUE}📋 INDIVIDUAL ANSWER SCORES & FEEDBACK${NC}"
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        
+        # Parse and display each answer with AI review
+        ANSWER_NUM=1
+        
+        # Use Python if available for better JSON parsing, otherwise use grep
+        if command -v python3 &> /dev/null; then
+            echo "$RESULT_RESPONSE" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    answers = data.get('answers', [])
+    for idx, ans in enumerate(answers, 1):
+        print(f'\n📌 Answer {idx}:')
+        print(f'   Question: {ans.get(\"question_id\", \"N/A\")[:30]}...')
+        print(f'   Text: {ans.get(\"text\", \"N/A\")[:60]}...')
+        
+        review = ans.get('review', {})
+        if review:
+            ai_score = review.get('ai_score')
+            ai_feedback = review.get('ai_feedback', '')
+            
+            if ai_score is not None:
+                print(f'   ✅ AI Score: {ai_score}/100')
+                if ai_feedback:
+                    # Truncate long feedback
+                    feedback_short = ai_feedback[:150] + '...' if len(ai_feedback) > 150 else ai_feedback
+                    print(f'   💬 AI Feedback: {feedback_short}')
+            else:
+                print(f'   ⏳ AI Score: Pending...')
+        else:
+            print(f'   ⏳ No review yet')
+except Exception as e:
+    print(f'Error parsing JSON: {e}', file=sys.stderr)
+"
+        else
+            # Fallback: simple grep-based parsing
+            AI_SCORES=$(echo "$RESULT_RESPONSE" | grep -o '"ai_score":[0-9.]*' | cut -d':' -f2)
+            
+            echo ""
+            echo "$AI_SCORES" | while read score; do
+                if [ -n "$score" ]; then
+                    echo -e "${GREEN}  ✅ Answer $ANSWER_NUM: Score = ${score}/100${NC}"
+                    ANSWER_NUM=$((ANSWER_NUM + 1))
+                fi
+            done
+        fi
+        
+        echo ""
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}✨ Worker Service is Running & Processing Jobs Successfully!${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     else
-        echo -e "${BLUE}⏳ AI Scoring still processing (check GROQ_API_KEY if this persists)${NC}"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${RED}⚠️  AI SCORING NOT COMPLETED (after 30 seconds)${NC}"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo "Possible issues:"
+        echo "  1. ❌ Worker service not deployed in Railway"
+        echo "  2. ❌ GROQ_API_KEY not set or invalid"
+        echo "  3. ❌ GROQ_MODEL incorrect (should be: llama-3.1-70b-versatile)"
+        echo "  4. ❌ Redis connection issue between API and Worker"
+        echo "  5. ❌ Worker crashed or restarting"
+        echo ""
+        echo "Check Railway logs:"
+        echo "  - Navigate to Railway Dashboard"
+        echo "  - Worker service → Deployments → View Logs"
+        echo "  - Look for Groq API errors or Redis connection errors"
+        echo ""
+        echo "Quick fixes:"
+        echo "  1. Verify GROQ_API_KEY in Railway worker variables"
+        echo "  2. Set GROQ_MODEL=llama-3.1-70b-versatile"
+        echo "  3. Check worker service is running (not stopped/failed)"
+        echo ""
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     fi
 else
     echo -e "${RED}❌ Failed to retrieve submission${NC}"
+    exit 1
 fi
 
 # 10. Register Reviewer
@@ -314,10 +426,40 @@ echo -e "\n=========================================="
 echo -e "${GREEN}🎉 API Test Flow Completed!${NC}"
 echo -e "=========================================="
 echo ""
+echo "Test Summary:"
+echo "  ✅ Health Check"
+echo "  ✅ User Registration (Creator & Participant)"  
+echo "  ✅ Authentication (Login)"
+echo "  ✅ Test Creation"
+echo "  ✅ Add Questions (3 questions)"
+echo "  ✅ Test Publishing"
+echo "  ✅ Access Token Generation"
+echo "  ✅ Test Submission"
+if [ "$AI_SCORED" = true ]; then
+    echo -e "  ${GREEN}✅ AI Scoring (Total: $AI_TOTAL)${NC}"
+else
+    echo -e "  ${RED}⚠️  AI Scoring (FAILED - Check worker)${NC}"
+fi
+echo ""
 echo "Test Details:"
-echo "  Test ID: $TEST_ID"
-echo "  Access Token: $ACCESS_TOKEN"
+echo "  Test ID:       $TEST_ID"
 echo "  Submission ID: $SUBMISSION_ID"
+echo "  Creator Email: $CREATOR_EMAIL"
+echo "  Participant:   $PARTICIPANT_EMAIL"
+echo ""
+echo "View in Railway:"
+echo "  API: https://assessly-be-production.up.railway.app"
+echo "  Submission: $API_URL/api/v1/submissions/$SUBMISSION_ID"
+echo ""
+if [ "$AI_SCORED" = false ]; then
+    echo -e "${RED}⚠️  Action Required:${NC}"
+    echo "  1. Check GROQ_API_KEY in Railway environment variables"
+    echo "  2. Verify worker service is running"
+    echo "  3. Check worker logs for errors"
+    echo "  4. Verify GROQ_MODEL = llama-3.1-70b-versatile"
+    echo ""
+fi
+echo "=========================================="
 echo ""
 echo "Accounts Created:"
 echo "  Creator: $CREATOR_EMAIL / $CREATOR_PASS"
