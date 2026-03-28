@@ -114,6 +114,18 @@ func (h *Handler) SubmitTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get access token from body or header
+	accessToken := req.AccessToken
+	if accessToken == "" {
+		accessToken = r.Header.Get("X-Access-Token")
+	}
+	
+	// Validate access token
+	if accessToken == "" {
+		h.respondError(w, http.StatusBadRequest, "access token is required")
+		return
+	}
+
 	// Convert answers
 	answers := make([]submission.AnswerInput, len(req.Answers))
 	for i, ans := range req.Answers {
@@ -130,7 +142,7 @@ func (h *Handler) SubmitTest(w http.ResponseWriter, r *http.Request) {
 
 	// Execute use case
 	ucReq := submission.SubmitTestRequest{
-		AccessToken: req.AccessToken,
+		AccessToken: accessToken,
 		Answers:     answers,
 	}
 
