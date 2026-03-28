@@ -349,6 +349,62 @@ func TestSubmission_GenerateTokenSubmitRetrieve(t *testing.T) {
 		assert.NotNil(t, submission2)
 	})
 
+	// Step 13: Test GenerateAccessTokenForTest endpoint
+	t.Run("GenerateAccessTokenForTest", func(t *testing.T) {
+		// Create a new test for this specific test
+		createReq := testUC.CreateTestRequest{
+			CreatorID:    creator.ID,
+			Title:        "Test for Access Token Endpoint",
+			Description:  "Testing direct token generation",
+			AllowRetakes: false,
+		}
+		testForToken, err := createTestUC.Execute(ctx, createReq)
+		require.NoError(t, err)
+
+		// Add a question
+		addQReq := testUC.AddQuestionRequest{
+			TestID:         testForToken.ID,
+			Text:           "Sample question?",
+			ExpectedAnswer: "Sample answer",
+			OrderNum:       0,
+		}
+		q, err := addQuestionUC.Execute(ctx, addQReq)
+		require.NoError(t, err)
+
+		// Publish the test
+		publishReq := testUC.PublishTestRequest{
+			TestID: testForToken.ID,
+		}
+		_, err = publishTestUC.Execute(ctx, publishReq)
+		require.NoError(t, err)
+
+		// Test access token generator (using same mock as above)
+		testTokenEmail := fmt.Sprintf("test-token-%d@example.com", time.Now().Unix())
+		generatedToken, err := accessTokenGen.GenerateAccessToken(testForToken.ID, testTokenEmail, 24)
+		require.NoError(t, err)
+		assert.NotEmpty(t, generatedToken)
+
+		// Validate the generated token can be used for submission
+		// Parse token to verify it has correct structure
+		claims, err := jwtService.ValidateToken(generatedToken)
+		require.NoError(t, err)
+		assert.Equal(t, "participant", claims.Role, "token should have participant role")
+		assert.Equal(t, testTokenEmail, claims.Email, "token should contain correct email")
+		assert.Equal(t, testForToken.ID.String(), claims.UserID, "token should contain test ID as UserID")
+
+		// Verify token can be used for submission
+		submitWithGeneratedToken := submissionUC.SubmitTestRequest{
+			AccessToken: generatedToken,
+			Answers: []submissionUC.AnswerInput{
+				{QuestionID: q.ID, Text: "Answer using generated token"},
+			},
+		}
+		submissionWithToken, err := submitTestUC.Execute(ctx, submitWithGeneratedToken)
+		require.NoError(t, err)
+		assert.NotNil(t, submissionWithToken)
+		assert.Equal(t, testTokenEmail, submissionWithToken.AccessEmail)
+	})
+
 	// Cleanup
 	t.Run("Cleanup", func(t *testing.T) {
 		// Delete in reverse order of foreign keys

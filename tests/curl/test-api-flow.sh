@@ -163,21 +163,29 @@ PARTICIPANT_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/auth/register" \
 
 if echo "$PARTICIPANT_RESPONSE" | grep -q '"id"'; then
     echo -e "${GREEN}✅ Participant registered${NC}"
-    
-    # Login participant to get token for submission
-    PARTICIPANT_LOGIN=$(curl -s -X POST "$API_URL/api/v1/auth/login" \
-      -H "Content-Type: application/json" \
-      -d '{
-        "email": "'$PARTICIPANT_EMAIL'",
-        "password": "'$PARTICIPANT_PASS'"
-      }')
-    
-    PARTICIPANT_TOKEN=$(echo "$PARTICIPANT_LOGIN" | grep -o '"token":"[^"]*' | cut -d'"' -f4)
-    echo -e "${GREEN}✅ Participant logged in${NC}"
-    # Use participant JWT token as access token for submission
-    ACCESS_TOKEN=$PARTICIPANT_TOKEN
 else
-    echo -e "${BLUE}ℹ️  Using test access_token for submission${NC}"
+    echo -e "${RED}❌ Failed to register participant${NC}"
+    exit 1
+fi
+
+# Generate access token for participant using test endpoint
+echo -e "${BLUE}7.5️⃣ Generating Access Token for Test${NC}"
+ACCESS_TOKEN_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/tests/$TEST_ID/access-token" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $CREATOR_TOKEN" \
+  -d '{
+    "email": "'$PARTICIPANT_EMAIL'",
+    "expiry_hours": 24
+  }')
+
+ACCESS_TOKEN=$(echo "$ACCESS_TOKEN_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+if [ -n "$ACCESS_TOKEN" ]; then
+    echo -e "${GREEN}✅ Access token generated: ${ACCESS_TOKEN:0:20}...${NC}"
+else
+    echo -e "${RED}❌ Failed to generate access token${NC}"
+    echo "$ACCESS_TOKEN_RESPONSE"
+    exit 1
 fi
 
 # 8. Submit Answers

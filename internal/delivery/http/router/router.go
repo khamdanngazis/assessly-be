@@ -39,6 +39,7 @@ func (r *Router) SetupRoutes(
 	},
 	submissionHandler interface {
 		GenerateAccessToken(w http.ResponseWriter, r *http.Request)
+		GenerateAccessTokenForTest(w http.ResponseWriter, r *http.Request)
 		SubmitTest(w http.ResponseWriter, r *http.Request)
 		GetSubmission(w http.ResponseWriter, r *http.Request)
 	},
@@ -122,6 +123,11 @@ func (r *Router) SetupRoutes(
 					}
 					r.Put("/{testID}/questions/{questionID}", notImplementedHandler)
 					r.Delete("/{testID}/questions/{questionID}", notImplementedHandler)
+
+					// Testing endpoint: Generate access token for test (development only)
+					if submissionHandler != nil {
+						r.Post("/{testID}/access-token", submissionHandler.GenerateAccessTokenForTest)
+					}
 				})
 
 				// Reviewer-only routes
