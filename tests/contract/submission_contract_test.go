@@ -31,7 +31,7 @@ func TestGenerateAccessTokenContract(t *testing.T) {
 
 	// Create real use case with mocks
 	generateAccessTokenUC := submissionUC.NewGenerateAccessTokenUseCase(mockTestRepo, mockTokenGen, mockEmailSender, logger)
-	submissionHandler := handler.NewSubmissionHandler(generateAccessTokenUC, nil, nil, logger)
+	submissionHandler := handler.NewSubmissionHandler(generateAccessTokenUC, nil, nil, nil, logger)
 
 	t.Run("should return 200 with message on successful token generation", func(t *testing.T) {
 		testID := uuid.New()
@@ -168,7 +168,7 @@ func TestGetSubmissionContract(t *testing.T) {
 
 	// Create real use case with mocks
 	getSubmissionUC := submissionUC.NewGetSubmissionUseCase(mockSubmissionRepo, mockAnswerRepo, mockReviewRepo, mockTestRepo, mockTokenValidator, logger)
-	submissionHandler := handler.NewSubmissionHandler(nil, nil, getSubmissionUC, logger)
+	submissionHandler := handler.NewSubmissionHandler(nil, nil, getSubmissionUC, nil, logger)
 
 	t.Run("should return 200 with submission details and scores", func(t *testing.T) {
 		submissionID := uuid.New()
@@ -320,6 +320,179 @@ func TestGetSubmissionContract(t *testing.T) {
 	})
 }
 
+// TestGenerateAccessTokenForTestContract validates POST /api/v1/tests/:testID/access-token
+func TestGenerateAccessTokenForTestContract(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	t.Run("should return 200 with access token on success", func(t *testing.T) {
+		// Setup mocks
+		mockTokenGen := &MockHandlerAccessTokenGenerator{}
+		testID := uuid.New()
+		email := "participant@example.com"
+		expectedToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token"
+
+		mockTokenGen.GenerateAccessTokenFunc = func(testIDStr, emailParam string, expiryHours int) (string, error) {
+			assert.Equal(t, testID.String(), testIDStr, "testID should match")
+			assert.Equal(t, email, emailParam, "email should match")
+			assert.Equal(t, 24, expiryHours, "default expiry hours should be 24")
+			return expectedToken, nil
+		}
+
+		submissionHandler := handler.NewSubmissionHandler(nil, nil, nil, mockTokenGen, logger)
+
+		// Prepare request
+		reqBody := map[string]interface{}{
+			"email": email,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/access-token", bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		// Setup chi URL params
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+
+		// Execute
+		submissionHandler.GenerateAccessTokenForTest(w, req)
+
+		// Validate HTTP status code
+		assert.Equal(t, http.StatusOK, w.Code, "should return 200 OK")
+
+		// Validate response Content-Type
+		assert.Equal(t, "application/json", w.Header().Get("Content-Type"), "should return JSON content type")
+
+		// Validate response body schema
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "response should be valid JSON")
+
+		// Validate response fields
+		assert.Contains(t, resp, "access_token", "response should contain access_token field")
+		assert.Equal(t, expectedToken, resp["access_token"], "access_token should match generated token")
+		assert.Contains(t, resp, "test_id", "response should contain test_id field")
+		assert.Equal(t, testID.String(), resp["test_id"], "test_id should match request")
+		assert.Contains(t, resp, "email", "response should contain email field")
+		assert.Equal(t, email, resp["email"], "email should match request")
+		assert.Contains(t, resp, "expiry_hours", "response should contain expiry_hours field")
+	})
+
+	t.Run("should return 200 with custom expiry hours", func(t *testing.T) {
+		mockTokenGen := &MockHandlerAccessTokenGenerator{}
+		testID := uuid.New()
+		email := "participant@example.com"
+		customExpiry := 48
+
+		mockTokenGen.GenerateAccessTokenFunc = func(testIDStr, emailParam string, expiryHours int) (string, error) {
+			assert.Equal(t, customExpiry, expiryHours, "expiry hours should match custom value")
+			return "token-48h", nil
+		}
+
+		submissionHandler := handler.NewSubmissionHandler(nil, nil, nil, mockTokenGen, logger)
+
+		reqBody := map[string]interface{}{
+			"email":        email,
+			"expiry_hours": customExpiry,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/access-token", bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		submissionHandler.GenerateAccessTokenForTest(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code, "should return 200 OK")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "response should be valid JSON")
+		assert.Equal(t, float64(customExpiry), resp["expiry_hours"], "expiry_hours should match custom value")
+	})
+
+	t.Run("should return 400 on invalid test ID", func(t *testing.T) {
+		mockTokenGen := &MockHandlerAccessTokenGenerator{}
+		submissionHandler := handler.NewSubmissionHandler(nil, nil, nil, mockTokenGen, logger)
+
+		reqBody := map[string]interface{}{
+			"email": "participant@example.com",
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/invalid-uuid/access-token", bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", "invalid-uuid")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		submissionHandler.GenerateAccessTokenForTest(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, "should return 400 Bad Request")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+
+	t.Run("should return 400 on invalid JSON body", func(t *testing.T) {
+		mockTokenGen := &MockHandlerAccessTokenGenerator{}
+		submissionHandler := handler.NewSubmissionHandler(nil, nil, nil, mockTokenGen, logger)
+
+		testID := uuid.New()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/access-token", bytes.NewReader([]byte("invalid json")))
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		submissionHandler.GenerateAccessTokenForTest(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, "should return 400 Bad Request")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+
+	t.Run("should return 404 when token generator not available", func(t *testing.T) {
+		// Handler without token generator (nil)
+		submissionHandler := handler.NewSubmissionHandler(nil, nil, nil, nil, logger)
+
+		testID := uuid.New()
+		reqBody := map[string]interface{}{
+			"email": "participant@example.com",
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/access-token", bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		submissionHandler.GenerateAccessTokenForTest(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code, "should return 404 Not Found")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+		assert.Equal(t, "endpoint not available", resp["error"], "error message should indicate endpoint unavailable")
+	})
+}
+
 // Mock implementations for submission contract tests
 
 type MockTestRepositoryForSubmission struct {
@@ -465,6 +638,17 @@ func (m *MockTokenValidator) ValidateToken(tokenString string) (testID string, e
 		return m.ValidateTokenFunc(tokenString)
 	}
 	return "", "", "", nil
+}
+
+type MockHandlerAccessTokenGenerator struct {
+	GenerateAccessTokenFunc func(testID, email string, expiryHours int) (string, error)
+}
+
+func (m *MockHandlerAccessTokenGenerator) GenerateAccessToken(testID, email string, expiryHours int) (string, error) {
+	if m.GenerateAccessTokenFunc != nil {
+		return m.GenerateAccessTokenFunc(testID, email, expiryHours)
+	}
+	return "", nil
 }
 
 // Helper function

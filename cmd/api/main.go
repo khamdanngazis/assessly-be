@@ -142,6 +142,7 @@ func main() {
 		generateAccessTokenUC,
 		submitTestUC,
 		getSubmissionUC,
+		&testAccessTokenGeneratorAdapter{jwtService: jwtService}, // For testing endpoints
 		slog.Default(),
 	)
 	reviewHandler := handler.NewReviewHandler(
@@ -305,6 +306,19 @@ type accessTokenGeneratorAdapter struct {
 }
 
 func (a *accessTokenGeneratorAdapter) GenerateAccessToken(testID uuid.UUID, email string, expiryHours int) (string, error) {
+	return a.jwtService.GenerateAccessToken(testID, email, expiryHours)
+}
+
+// testAccessTokenGeneratorAdapter adapts JWT service for handler interface (testID as string)
+type testAccessTokenGeneratorAdapter struct {
+	jwtService *auth.JWTService
+}
+
+func (a *testAccessTokenGeneratorAdapter) GenerateAccessToken(testIDStr, email string, expiryHours int) (string, error) {
+	testID, err := uuid.Parse(testIDStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid test ID: %w", err)
+	}
 	return a.jwtService.GenerateAccessToken(testID, email, expiryHours)
 }
 

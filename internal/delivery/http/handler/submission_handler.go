@@ -48,11 +48,17 @@ type GetSubmissionResponse struct {
 	Answers    []AnswerResponse   `json:"answers"`
 }
 
+// AccessTokenGenerator interface for testing purposes
+type AccessTokenGenerator interface {
+	GenerateAccessToken(testID, email string, expiryHours int) (string, error)
+}
+
 // Handler handles submission HTTP requests
 type Handler struct {
 	generateAccessTokenUC *submission.GenerateAccessTokenUseCase
 	submitTestUC          *submission.SubmitTestUseCase
 	getSubmissionUC       *submission.GetSubmissionUseCase
+	tokenGenerator        AccessTokenGenerator // Optional: for testing endpoints
 	logger                *slog.Logger
 }
 
@@ -61,12 +67,14 @@ func NewSubmissionHandler(
 	generateAccessTokenUC *submission.GenerateAccessTokenUseCase,
 	submitTestUC *submission.SubmitTestUseCase,
 	getSubmissionUC *submission.GetSubmissionUseCase,
+	tokenGenerator AccessTokenGenerator,
 	logger *slog.Logger,
 ) *Handler {
 	return &Handler{
 		generateAccessTokenUC: generateAccessTokenUC,
 		submitTestUC:          submitTestUC,
 		getSubmissionUC:       getSubmissionUC,
+		tokenGenerator:        tokenGenerator,
 		logger:                logger,
 	}
 }
@@ -281,6 +289,58 @@ func (h *Handler) GetSubmission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondJSON(w, http.StatusOK, response)
+}
+
+// GenerateAccessTokenForTest handles POST /api/v1/tests/{testID}/access-token (TESTING ONLY)
+// This endpoint directly returns the access token instead of sending it via email.
+// WARNING: This should only be enabled in development/testing environments.
+func (h *Handler) GenerateAccessTokenForTest(w http.ResponseWriter, r *http.Request) {
+	// Check if tokenGenerator is available
+	if h.tokenGenerator == nil {
+		h.respondError(w, http.StatusNotFound, "endpoint not available")
+		return
+	}
+
+	// Get testID from URL parameter
+	testIDStr := chi.URLParam(r, "testID")
+	testID, err := uuid.Parse(testIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid test ID")
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Email       string `json:"email"`
+		ExpiryHours int    `json:"expiry_hours,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Warn("invalid request body", "error", err)
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Default expiry
+	expiryHours := req.ExpiryHours
+	if expiryHours == 0 {
+		expiryHours = 24
+	}
+
+	// Generate access token directly
+	accessToken, err := h.tokenGenerator.GenerateAccessToken(testID.String(), req.Email, expiryHours)
+	if err != nil {
+		h.logger.Error("failed to generate access token", "error", err)
+		h.respondError(w, http.StatusInternalServerError, "failed to generate access token")
+		return
+	}
+
+	// Return token in response
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token": accessToken,
+		"test_id":      testID.String(),
+		"email":        req.Email,
+		"expiry_hours": expiryHours,
+	})
 }
 
 // handleUseCaseError maps use case errors to HTTP responses
