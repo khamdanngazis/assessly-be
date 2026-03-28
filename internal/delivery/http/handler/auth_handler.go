@@ -37,6 +37,7 @@ func NewAuthHandler(
 
 // RegisterRequest represents the registration request body
 type RegisterRequest struct {
+	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Role     string `json:"role"`
@@ -45,6 +46,7 @@ type RegisterRequest struct {
 // RegisterResponse represents the registration response
 type RegisterResponse struct {
 	ID        string `json:"id"`
+	Name      string `json:"name"`
 	Email     string `json:"email"`
 	Role      string `json:"role"`
 	CreatedAt string `json:"created_at"`
@@ -72,6 +74,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	// Execute use case
 	user, err := h.registerUC.Execute(r.Context(), auth.RegisterUserRequest{
+		Name:     req.Name,
 		Email:    req.Email,
 		Password: req.Password,
 		Role:     role,
@@ -85,6 +88,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	// Respond with created user (without password)
 	resp := RegisterResponse{
 		ID:        user.ID.String(),
+		Name:      user.Name,
 		Email:     user.Email,
 		Role:      string(user.Role),
 		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -108,6 +112,7 @@ type LoginResponse struct {
 // UserResponse represents user data in responses
 type UserResponse struct {
 	ID    string `json:"id"`
+	Name  string `json:"name"`
 	Email string `json:"email"`
 	Role  string `json:"role"`
 }
@@ -136,6 +141,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Token: result.Token,
 		User: UserResponse{
 			ID:    result.User.ID.String(),
+			Name:  result.User.Name,
 			Email: result.User.Email,
 			Role:  string(result.User.Role),
 		},

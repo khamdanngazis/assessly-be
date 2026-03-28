@@ -23,12 +23,13 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 // Create creates a new user in the database
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, password_hash, role, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO users (id, name, email, password_hash, role, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 
 	_, err := r.pool.Exec(ctx, query,
 		user.ID,
+		user.Name,
 		user.Email,
 		user.PasswordHash,
 		user.Role,
@@ -56,7 +57,7 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 // FindByID finds a user by ID
 func (r *UserRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, role, created_at, updated_at
+		SELECT id, name, email, password_hash, role, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -64,6 +65,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Us
 	var user domain.User
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&user.ID,
+		&user.Name,
 		&user.Email,
 		&user.PasswordHash,
 		&user.Role,
@@ -90,7 +92,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Us
 // FindByEmail finds a user by email address
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, role, created_at, updated_at
+		SELECT id, name, email, password_hash, role, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
@@ -98,6 +100,7 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain
 	var user domain.User
 	err := r.pool.QueryRow(ctx, query, email).Scan(
 		&user.ID,
+		&user.Name,
 		&user.Email,
 		&user.PasswordHash,
 		&user.Role,

@@ -17,6 +17,7 @@ type PasswordHasher interface {
 
 // RegisterUserRequest holds the data for user registration
 type RegisterUserRequest struct {
+	Name     string
 	Email    string
 	Password string
 	Role     domain.UserRole
@@ -82,6 +83,7 @@ func (uc *RegisterUserUseCase) Execute(ctx context.Context, req RegisterUserRequ
 	now := time.Now()
 	user := &domain.User{
 		ID:           uuid.New(),
+		Name:         req.Name,
 		Email:        req.Email,
 		PasswordHash: hashedPassword,
 		Role:         req.Role,
@@ -106,6 +108,13 @@ func (uc *RegisterUserUseCase) Execute(ctx context.Context, req RegisterUserRequ
 
 // validateRequest validates the registration request
 func (uc *RegisterUserUseCase) validateRequest(req RegisterUserRequest) error {
+	if req.Name == "" {
+		return domain.ErrValidation{
+			Field:   "name",
+			Message: "name is required",
+		}
+	}
+
 	if req.Email == "" {
 		return domain.ErrValidation{
 			Field:   "email",

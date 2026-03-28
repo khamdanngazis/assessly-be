@@ -17,9 +17,10 @@ const (
 // User represents an authenticated user (creator or reviewer)
 type User struct {
 	ID           uuid.UUID `json:"id"`
+	Name         string    `json:"name"`
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"` // Never expose in JSON
- Role         UserRole  `json:"role"`
+	Role         UserRole  `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
