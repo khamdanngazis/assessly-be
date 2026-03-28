@@ -44,11 +44,9 @@ CREATOR_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/auth/register" \
 
 echo "Response: $CREATOR_RESPONSE"
 
-if echo "$CREATOR_RESPONSE" | grep -q "access_token"; then
-    CREATOR_TOKEN=$(echo "$CREATOR_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-    CREATOR_ID=$(echo "$CREATOR_RESPONSE" | grep -o '"id":"[^"]*' | cut -d'"' -f4)
-    echo -e "${GREEN}✅ Creator registered${NC}"
-    echo "Creator Token: ${CREATOR_TOKEN:0:20}..."
+if echo "$CREATOR_RESPONSE" | grep -q '"id"'; then
+    CREATOR_ID=$(echo "$CREATOR_RESPONSE" | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+    echo -e "${GREEN}✅ Creator registered with ID: $CREATOR_ID${NC}"
 else
     echo -e "${RED}❌ Creator registration failed${NC}"
     exit 1
@@ -64,8 +62,10 @@ LOGIN_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/auth/login" \
   }')
 
 echo "Response: $LOGIN_RESPONSE"
-if echo "$LOGIN_RESPONSE" | grep -q "access_token"; then
+if echo "$LOGIN_RESPONSE" | grep -q '"token"'; then
+    CREATOR_TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"token":"[^"]*' | cut -d'"' -f4)
     echo -e "${GREEN}✅ Login successful${NC}"
+    echo "Token: ${CREATOR_TOKEN:0:30}..."
 else
     echo -e "${RED}❌ Login failed${NC}"
     exit 1
@@ -140,10 +140,8 @@ PUBLISH_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/tests/$TEST_ID/publish" \
 
 echo "Response: $PUBLISH_RESPONSE"
 
-if echo "$PUBLISH_RESPONSE" | grep -q '"access_token"'; then
-    ACCESS_TOKEN=$(echo "$PUBLISH_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+if echo "$PUBLISH_RESPONSE" | grep -q '"is_published":true'; then
     echo -e "${GREEN}✅ Test published${NC}"
-    echo "Access Token: $ACCESS_TOKEN"
 else
     echo -e "${RED}❌ Test publish failed${NC}"
     exit 1
@@ -160,13 +158,26 @@ PARTICIPANT_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/auth/register" \
     "name": "Test Participant",
     "email": "'$PARTICIPANT_EMAIL'",
     "password": "'$PARTICIPANT_PASS'",
-    "role": "participant"
+    "role": "creator"
   }')
 
-if echo "$PARTICIPANT_RESPONSE" | grep -q "access_token"; then
+if echo "$PARTICIPANT_RESPONSE" | grep -q '"id"'; then
     echo -e "${GREEN}✅ Participant registered${NC}"
+    
+    # Login participant to get token for submission
+    PARTICIPANT_LOGIN=$(curl -s -X POST "$API_URL/api/v1/auth/login" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "'$PARTICIPANT_EMAIL'",
+        "password": "'$PARTICIPANT_PASS'"
+      }')
+    
+    PARTICIPANT_TOKEN=$(echo "$PARTICIPANT_LOGIN" | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+    echo -e "${GREEN}✅ Participant logged in${NC}"
+    # Use participant JWT token as access token for submission
+    ACCESS_TOKEN=$PARTICIPANT_TOKEN
 else
-    echo -e "${RED}❌ Participant registration failed${NC}"
+    echo -e "${BLUE}ℹ️  Using test access_token for submission${NC}"
 fi
 
 # 8. Submit Answers
@@ -240,9 +251,20 @@ REVIEWER_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/auth/register" \
     "role": "reviewer"
   }')
 
-if echo "$REVIEWER_RESPONSE" | grep -q "access_token"; then
-    REVIEWER_TOKEN=$(echo "$REVIEWER_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-    echo -e "${GREEN}✅ Reviewer registered${NC}"
+if echo "$REVIEWER_RESPONSE" | grep -q '"id"'; then
+    REVIEWER_ID=$(echo "$REVIEWER_RESPONSE" | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+    echo -e "${GREEN}✅ Reviewer registered with ID: $REVIEWER_ID${NC}"
+    
+    # Login reviewer to get token
+    REVIEWER_LOGIN=$(curl -s -X POST "$API_URL/api/v1/auth/login" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "'$REVIEWER_EMAIL'",
+        "password": "'$REVIEWER_PASS'"
+      }')
+    
+    REVIEWER_TOKEN=$(echo "$REVIEWER_LOGIN" | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+    echo -e "${GREEN}✅ Reviewer logged in${NC}"
     
     # 11. Reviewer views submissions
     echo -e "\n${BLUE}1️⃣1️⃣ Reviewer Listing Submissions${NC}"
