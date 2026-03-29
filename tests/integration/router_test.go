@@ -276,6 +276,27 @@ func (h *mockTestHandlerForRouter) PublishTest(w http.ResponseWriter, r *http.Re
 	})
 }
 
+func (h *mockTestHandlerForRouter) ListTests(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tests": []map[string]interface{}{
+			{
+				"id":            "test-123",
+				"title":         "Test",
+				"description":   "Test",
+				"allow_retakes": true,
+				"is_published":  false,
+			},
+		},
+		"pagination": map[string]interface{}{
+			"page":      1,
+			"page_size": 20,
+			"total":     1,
+		},
+	})
+}
+
 type mockReviewHandlerForRouter struct{}
 
 func (h *mockReviewHandlerForRouter) HandleAddManualReview(w http.ResponseWriter, r *http.Request) {

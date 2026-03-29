@@ -31,6 +31,7 @@ func (r *Router) SetupRoutes(
 		ResetPassword(w http.ResponseWriter, r *http.Request)
 	},
 	testHandler interface {
+		ListTests(w http.ResponseWriter, r *http.Request)
 		CreateTest(w http.ResponseWriter, r *http.Request)
 		PublishTest(w http.ResponseWriter, r *http.Request)
 	},
@@ -103,11 +104,12 @@ func (r *Router) SetupRoutes(
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireRole("creator", logger))
 
-					r.Get("/", notImplementedHandler)
 					if testHandler != nil {
+						r.Get("/", testHandler.ListTests)
 						r.Post("/", testHandler.CreateTest)
 						r.Post("/{testID}/publish", testHandler.PublishTest)
 					} else {
+						r.Get("/", notImplementedHandler)
 						r.Post("/", notImplementedHandler)
 						r.Post("/{testID}/publish", notImplementedHandler)
 					}

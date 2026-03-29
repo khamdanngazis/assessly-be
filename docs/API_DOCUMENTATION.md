@@ -172,7 +172,7 @@ Response:
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/tests/{testID}/submissions` | JWT (reviewer) | List submissions for test |
-| POST | `/reviews/{answerID}/manual` | JWT (reviewer) | Add manual review score |
+| PUT | `/reviews/{answerID}` | JWT (reviewer) | Add/update manual review |
 | GET | `/reviews/{answerID}` | JWT (reviewer) | Get review details |
 
 ---
@@ -294,11 +294,11 @@ GET /tests/{test_id}/submissions
 Authorization: Bearer <reviewer-token>
 
 # 3. Add Manual Review
-POST /reviews/{answer_id}/manual
+PUT /reviews/{answer_id}
 Authorization: Bearer <reviewer-token>
 {
-  "score": 98,
-  "feedback": "Great answer, but could mention lexical scope..."
+  "manual_score": 98,
+  "manual_feedback": "Great answer, but could mention lexical scope..."
 }
 ```
 

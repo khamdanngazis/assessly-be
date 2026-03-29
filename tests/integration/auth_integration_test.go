@@ -65,6 +65,7 @@ func TestAuthIntegration_RegisterLoginReset(t *testing.T) {
 	// Step 1: Register new user
 	t.Run("Register", func(t *testing.T) {
 		req := authUC.RegisterUserRequest{
+			Name:     "Test User",
 			Email:    email,
 			Password: password,
 			Role:     domain.UserRole("creator"),

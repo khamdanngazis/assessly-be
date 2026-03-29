@@ -91,6 +91,21 @@ else
     exit 1
 fi
 
+# 4.5 List Tests (Creator)
+echo -e "\n${BLUE}4️⃣.5️⃣ Listing Creator's Tests${NC}"
+LIST_TESTS_RESPONSE=$(curl -s -X GET "$API_URL/api/v1/tests" \
+  -H "Authorization: Bearer $CREATOR_TOKEN")
+
+echo "Response: $LIST_TESTS_RESPONSE"
+
+if echo "$LIST_TESTS_RESPONSE" | grep -q '"tests"'; then
+    TEST_COUNT=$(echo "$LIST_TESTS_RESPONSE" | grep -o '"tests":\[' | wc -l)
+    echo -e "${GREEN}✅ Tests list retrieved (Creator can see their tests)${NC}"
+else
+    echo -e "${RED}❌ Failed to list tests${NC}"
+    exit 1
+fi
+
 # 5. Add Questions
 echo -e "\n${BLUE}5️⃣ Adding Questions to Test${NC}"
 
@@ -402,20 +417,23 @@ if echo "$REVIEWER_RESPONSE" | grep -q '"id"'; then
     # Get first answer ID from submission
     ANSWER_ID=$(echo "$RESULT_RESPONSE" | grep -o '"id":"[^"]*' | sed -n '2p' | cut -d'"' -f4)
     
-    REVIEW_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/reviews" \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $REVIEWER_TOKEN" \
-      -d '{
-        "answer_id": "'$ANSWER_ID'",
-        "score": 95,
-        "feedback": "Excellent explanation! Very clear and accurate."
-      }')
-    
-    echo "Response: $REVIEW_RESPONSE"
-    if echo "$REVIEW_RESPONSE" | grep -q '"id"'; then
-        echo -e "${GREEN}✅ Manual review added${NC}"
+    if [ -n "$ANSWER_ID" ]; then
+        REVIEW_RESPONSE=$(curl -s -X PUT "$API_URL/api/v1/reviews/$ANSWER_ID" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $REVIEWER_TOKEN" \
+          -d '{
+            "manual_score": 95,
+            "manual_feedback": "Excellent explanation! Very clear and accurate."
+          }')
+        
+        echo "Response: $REVIEW_RESPONSE"
+        if echo "$REVIEW_RESPONSE" | grep -q '"id"'; then
+            echo -e "${GREEN}✅ Manual review added${NC}"
+        else
+            echo -e "${BLUE}ℹ️  Manual review response: Check if endpoint is implemented${NC}"
+        fi
     else
-        echo -e "${BLUE}ℹ️  Manual review response: Check if answer_id is valid${NC}"
+        echo -e "${BLUE}ℹ️  Could not extract answer ID from submission response${NC}"
     fi
 else
     echo -e "${RED}❌ Reviewer registration failed${NC}"

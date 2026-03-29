@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -16,6 +17,7 @@ import (
 type TestHandler struct {
 	createTestUC  *test.CreateTestUseCase
 	publishTestUC *test.PublishTestUseCase
+	listTestsUC   *test.ListTestsUseCase
 	logger        *slog.Logger
 }
 
@@ -23,11 +25,13 @@ type TestHandler struct {
 func NewTestHandler(
 	createTestUC *test.CreateTestUseCase,
 	publishTestUC *test.PublishTestUseCase,
+	listTestsUC *test.ListTestsUseCase,
 	logger *slog.Logger,
 ) *TestHandler {
 	return &TestHandler{
 		createTestUC:  createTestUC,
 		publishTestUC: publishTestUC,
+		listTestsUC:   listTestsUC,
 		logger:        logger,
 	}
 }
@@ -49,6 +53,87 @@ type TestResponse struct {
 	IsPublished  bool   `json:"is_published"`
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
+}
+
+// ListTests handles listing tests based on user role
+func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
+	// Get user ID and role from context
+	userIDStr, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		h.respondError(w, http.StatusUnauthorized, "user not authenticated")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "invalid user ID")
+		return
+	}
+
+	userRole, ok := middleware.GetUserRole(r.Context())
+	if !ok {
+		h.respondError(w, http.StatusUnauthorized, "user role not found")
+		return
+	}
+
+	// Parse query parameters
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		status = "all"
+	}
+
+	page := 1
+	pageSize := 20
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := parsePositiveInt(pageStr); err == nil {
+			page = p
+		}
+	}
+
+	if sizeStr := r.URL.Query().Get("page_size"); sizeStr != "" {
+		if s, err := parsePositiveInt(sizeStr); err == nil && s <= 100 {
+			pageSize = s
+		}
+	}
+
+	// Execute use case
+	resp, err := h.listTestsUC.Execute(r.Context(), test.ListTestsRequest{
+		UserID:   userID,
+		UserRole: userRole,
+		Status:   status,
+		Page:     page,
+		PageSize: pageSize,
+	})
+
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	// Convert tests to response format
+	testResponses := make([]TestResponse, len(resp.Tests))
+	for i, t := range resp.Tests {
+		testResponses[i] = TestResponse{
+			ID:           t.ID.String(),
+			CreatorID:    t.CreatorID.String(),
+			Title:        t.Title,
+			Description:  t.Description,
+			AllowRetakes: t.AllowRetakes,
+			IsPublished:  t.IsPublished,
+			CreatedAt:    t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:    t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"tests": testResponses,
+		"pagination": map[string]interface{}{
+			"page":      page,
+			"page_size": pageSize,
+			"total":     resp.Total,
+		},
+	})
 }
 
 // CreateTest handles test creation
@@ -166,4 +251,14 @@ func (h *TestHandler) respondJSON(w http.ResponseWriter, status int, data interf
 // respondError writes an error JSON response
 func (h *TestHandler) respondError(w http.ResponseWriter, status int, message string) {
 	h.respondJSON(w, status, map[string]string{"error": message})
+}
+
+// parsePositiveInt parses a string to a positive integer
+func parsePositiveInt(s string) (int, error) {
+	var n int
+	_, err := fmt.Sscanf(s, "%d", &n)
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("invalid positive integer")
+	}
+	return n, nil
 }

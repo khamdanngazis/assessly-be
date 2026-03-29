@@ -493,3 +493,281 @@ func TestPublishTest_NoQuestions(t *testing.T) {
 	mockQuestionRepo.AssertExpectations(t)
 	mockTestRepo.AssertNotCalled(t, "Update")
 }
+
+// ============================================================================
+// ListTestsUseCase Tests
+// ============================================================================
+
+func TestListTests_CreatorSuccess(t *testing.T) {
+	// Arrange
+	mockTestRepo := new(MockTestRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo)
+
+	creatorID := uuid.New()
+	expectedTests := []*domain.Test{
+		{
+			ID:          uuid.New(),
+			CreatorID:   creatorID,
+			Title:       "Test 1",
+			Description: "Description 1",
+			IsPublished: true,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+		{
+			ID:          uuid.New(),
+			CreatorID:   creatorID,
+			Title:       "Test 2",
+			Description: "Description 2",
+			IsPublished: false,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+	}
+
+	req := test.ListTestsRequest{
+		UserID:   creatorID,
+		UserRole: "creator",
+		Status:   "all",
+		Page:     1,
+		PageSize: 20,
+	}
+
+	mockTestRepo.On("FindByCreatorID", mock.Anything, creatorID, 20, 0).
+		Return(expectedTests, nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 2, result.Total)
+	assert.Len(t, result.Tests, 2)
+	assert.Equal(t, "Test 1", result.Tests[0].Title)
+	assert.Equal(t, "Test 2", result.Tests[1].Title)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestListTests_CreatorFilterPublished(t *testing.T) {
+	// Arrange
+	mockTestRepo := new(MockTestRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo)
+
+	creatorID := uuid.New()
+	allTests := []*domain.Test{
+		{
+			ID:          uuid.New(),
+			CreatorID:   creatorID,
+			Title:       "Published Test",
+			IsPublished: true,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+		{
+			ID:          uuid.New(),
+			CreatorID:   creatorID,
+			Title:       "Draft Test",
+			IsPublished: false,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+	}
+
+	req := test.ListTestsRequest{
+		UserID:   creatorID,
+		UserRole: "creator",
+		Status:   "published",
+		Page:     1,
+		PageSize: 20,
+	}
+
+	mockTestRepo.On("FindByCreatorID", mock.Anything, creatorID, 20, 0).
+		Return(allTests, nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 1, result.Total)
+	assert.Len(t, result.Tests, 1)
+	assert.Equal(t, "Published Test", result.Tests[0].Title)
+	assert.True(t, result.Tests[0].IsPublished)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestListTests_CreatorFilterDraft(t *testing.T) {
+	// Arrange
+	mockTestRepo := new(MockTestRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo)
+
+	creatorID := uuid.New()
+	allTests := []*domain.Test{
+		{
+			ID:          uuid.New(),
+			CreatorID:   creatorID,
+			Title:       "Published Test",
+			IsPublished: true,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+		{
+			ID:          uuid.New(),
+			CreatorID:   creatorID,
+			Title:       "Draft Test",
+			IsPublished: false,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+	}
+
+	req := test.ListTestsRequest{
+		UserID:   creatorID,
+		UserRole: "creator",
+		Status:   "draft",
+		Page:     1,
+		PageSize: 20,
+	}
+
+	mockTestRepo.On("FindByCreatorID", mock.Anything, creatorID, 20, 0).
+		Return(allTests, nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 1, result.Total)
+	assert.Len(t, result.Tests, 1)
+	assert.Equal(t, "Draft Test", result.Tests[0].Title)
+	assert.False(t, result.Tests[0].IsPublished)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestListTests_ReviewerSuccess(t *testing.T) {
+	// Arrange
+	mockTestRepo := new(MockTestRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo)
+
+	reviewerID := uuid.New()
+	expectedTests := []*domain.Test{
+		{
+			ID:          uuid.New(),
+			CreatorID:   uuid.New(),
+			Title:       "Published Test 1",
+			IsPublished: true,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+		{
+			ID:          uuid.New(),
+			CreatorID:   uuid.New(),
+			Title:       "Published Test 2",
+			IsPublished: true,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+	}
+
+	req := test.ListTestsRequest{
+		UserID:   reviewerID,
+		UserRole: "reviewer",
+		Status:   "all",
+		Page:     1,
+		PageSize: 20,
+	}
+
+	mockTestRepo.On("FindPublished", mock.Anything, 20, 0).
+		Return(expectedTests, nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 2, result.Total)
+	assert.Len(t, result.Tests, 2)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestListTests_UnauthorizedRole(t *testing.T) {
+	// Arrange
+	mockTestRepo := new(MockTestRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo)
+
+	req := test.ListTestsRequest{
+		UserID:   uuid.New(),
+		UserRole: "participant",
+		Status:   "all",
+		Page:     1,
+		PageSize: 20,
+	}
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	var unauthorizedErr domain.ErrUnauthorized
+	assert.True(t, errors.As(err, &unauthorizedErr))
+	mockTestRepo.AssertNotCalled(t, "FindByCreatorID")
+	mockTestRepo.AssertNotCalled(t, "FindPublished")
+}
+
+func TestListTests_PaginationDefaults(t *testing.T) {
+	// Arrange
+	mockTestRepo := new(MockTestRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo)
+
+	creatorID := uuid.New()
+	req := test.ListTestsRequest{
+		UserID:   creatorID,
+		UserRole: "creator",
+		Status:   "all",
+		Page:     0, // Should default to 1
+		PageSize: 0, // Should default to 20
+	}
+
+	mockTestRepo.On("FindByCreatorID", mock.Anything, creatorID, 20, 0).
+		Return([]*domain.Test{}, nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestListTests_PaginationMaxLimit(t *testing.T) {
+	// Arrange
+	mockTestRepo := new(MockTestRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo)
+
+	creatorID := uuid.New()
+	req := test.ListTestsRequest{
+		UserID:   creatorID,
+		UserRole: "creator",
+		Status:   "all",
+		Page:     1,
+		PageSize: 200, // Should be capped at 100
+	}
+
+	mockTestRepo.On("FindByCreatorID", mock.Anything, creatorID, 100, 0).
+		Return([]*domain.Test{}, nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	mockTestRepo.AssertExpectations(t)
+}
+
