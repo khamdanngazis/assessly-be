@@ -19,6 +19,9 @@ info:
     name: Private
 
 servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/nocompany-a80/asseesssly-be/1.0.0
   - url: http://localhost:8080/api/v1
     description: Local development
   - url: https://assessly-be-production.up.railway.app/api/v1
@@ -57,8 +60,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, password, role]
+              required: [name, email, password, role]
               properties:
+                name:
+                  type: string
+                  maxLength: 255
+                  example: Test Creator
                 email:
                   type: string
                   format: email
@@ -86,6 +93,8 @@ paths:
                     type: string
                     format: uuid
                   email:
+                    type: string
+                  name:
                     type: string
                   role:
                     type: string
@@ -809,21 +818,37 @@ paths:
     post:
       tags: [Submissions]
       summary: Submit test answers
-      description: Participant submits answers for a test using access token
+      description: |
+        Participant submits answers for a test using access token.
+        Access token can be provided in either:
+        - Request body (`access_token` field), OR
+        - HTTP header (`X-Access-Token`)
       operationId: submitTest
       security:
         - AccessToken: []
+      parameters:
+        - in: header
+          name: X-Access-Token
+          schema:
+            type: string
+          description: Access token (alternative to body field)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [access_token, answers]
+              required: [answers]
               properties:
+                test_id:
+                  type: string
+                  format: uuid
+                  description: "Optional: Test ID (derived from access token, can be omitted)"
+                  example: 123e4567-e89b-12d3-a456-426614174000
                 access_token:
                   type: string
-                  description: Token from access email
+                  description: "Optional: Token from access email (or use X-Access-Token header)"
                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
                 answers:
                   type: array
@@ -1096,6 +1121,9 @@ components:
           type: string
           format: email
           example: creator@example.com
+        name:
+          type: string
+          example: Creator
         role:
           type: string
           enum: [creator, reviewer]
@@ -1215,6 +1243,12 @@ components:
           nullable: true
           description: Sum of manual scores (null if not yet reviewed)
           example: 180.0
+        display_score:
+          type: number
+          format: float
+          nullable: true
+          description: Display score (prioritizes manual over AI)
+          example: 180.0
 
     SubmissionSummary:
       type: object
@@ -1301,6 +1335,7 @@ components:
         answer_id:
           type: string
           format: uuid
+          description: ID of the answer being reviewed
         reviewer_id:
           type: string
           format: uuid
@@ -1336,6 +1371,17 @@ components:
           type: string
           format: date-time
           nullable: true
+        display_score:
+          type: number
+          format: float
+          nullable: true
+          description: Display score (prioritizes manual over AI)
+          example: 90.0
+        display_feedback:
+          type: string
+          nullable: true
+          description: Display feedback (prioritizes manual over AI)
+          example: Excellent work! Minor grammar issues on paragraph 3.
 
     # ================================================================
     # UTILITY SCHEMAS

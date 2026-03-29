@@ -30,6 +30,7 @@ func TestRegisterUser_Success(t *testing.T) {
 	useCase := auth.NewRegisterUserUseCase(mockUserRepo, mockHasher, logger)
 
 	req := auth.RegisterUserRequest{
+		Name:     "John Doe",
 		Email:    "john@example.com",
 		Password: "password123",
 		Role:     domain.RoleCreator,
@@ -68,6 +69,7 @@ func TestRegisterUser_EmailAlreadyExists(t *testing.T) {
 	useCase := auth.NewRegisterUserUseCase(mockUserRepo, mockHasher, logger)
 
 	req := auth.RegisterUserRequest{
+		Name:     "Existing User",
 		Email:    "existing@example.com",
 		Password: "password123",
 		Role:     domain.RoleCreator,

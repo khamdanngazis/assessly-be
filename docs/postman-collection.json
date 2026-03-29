@@ -394,11 +394,11 @@
         {
           "name": "Add Manual Review",
           "request": {
-            "method": "POST",
+            "method": "PUT",
             "header": [],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"score\": 95,\n  \"feedback\": \"Great answer! Very clear explanation.\"\n}",
+              "raw": "{\n  \"manual_score\": 95,\n  \"manual_feedback\": \"Great answer! Very clear explanation.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -406,9 +406,9 @@
               }
             },
             "url": {
-              "raw": "{{base_url}}/reviews/{{answer_id}}/manual",
+              "raw": "{{base_url}}/reviews/{{answer_id}}",
               "host": ["{{base_url}}"],
-              "path": ["reviews", "{{answer_id}}", "manual"]
+              "path": ["reviews", "{{answer_id}}"]
             }
           }
         }
