@@ -32,6 +32,7 @@ func (r *Router) SetupRoutes(
 	},
 	testHandler interface {
 		ListTests(w http.ResponseWriter, r *http.Request)
+		GetTest(w http.ResponseWriter, r *http.Request)
 		CreateTest(w http.ResponseWriter, r *http.Request)
 		PublishTest(w http.ResponseWriter, r *http.Request)
 	},
@@ -106,14 +107,15 @@ func (r *Router) SetupRoutes(
 
 					if testHandler != nil {
 						r.Get("/", testHandler.ListTests)
+						r.Get("/{testID}", testHandler.GetTest)
 						r.Post("/", testHandler.CreateTest)
 						r.Post("/{testID}/publish", testHandler.PublishTest)
 					} else {
 						r.Get("/", notImplementedHandler)
+						r.Get("/{testID}", notImplementedHandler)
 						r.Post("/", notImplementedHandler)
 						r.Post("/{testID}/publish", notImplementedHandler)
 					}
-					r.Get("/{testID}", notImplementedHandler)
 					r.Put("/{testID}", notImplementedHandler)
 					r.Delete("/{testID}", notImplementedHandler)
 
@@ -135,6 +137,13 @@ func (r *Router) SetupRoutes(
 				// Reviewer-only routes
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireRole("reviewer", logger))
+
+					// Get test details (published only)
+					if testHandler != nil {
+						r.Get("/{testID}", testHandler.GetTest)
+					} else {
+						r.Get("/{testID}", notImplementedHandler)
+					}
 
 					// T089: Submissions list for reviewers
 					if reviewHandler != nil {

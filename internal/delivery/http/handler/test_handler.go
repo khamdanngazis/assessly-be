@@ -18,6 +18,7 @@ type TestHandler struct {
 	createTestUC  *test.CreateTestUseCase
 	publishTestUC *test.PublishTestUseCase
 	listTestsUC   *test.ListTestsUseCase
+	getTestUC     *test.GetTestUseCase
 	logger        *slog.Logger
 }
 
@@ -26,12 +27,14 @@ func NewTestHandler(
 	createTestUC *test.CreateTestUseCase,
 	publishTestUC *test.PublishTestUseCase,
 	listTestsUC *test.ListTestsUseCase,
+	getTestUC *test.GetTestUseCase,
 	logger *slog.Logger,
 ) *TestHandler {
 	return &TestHandler{
 		createTestUC:  createTestUC,
 		publishTestUC: publishTestUC,
 		listTestsUC:   listTestsUC,
+		getTestUC:     getTestUC,
 		logger:        logger,
 	}
 }
@@ -134,6 +137,67 @@ func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
 			"total":     resp.Total,
 		},
 	})
+}
+
+// GetTest handles retrieving a single test by ID
+func (h *TestHandler) GetTest(w http.ResponseWriter, r *http.Request) {
+	// Get test ID from URL
+	testIDStr := chi.URLParam(r, "testID")
+	if testIDStr == "" {
+		h.respondError(w, http.StatusBadRequest, "test ID is required")
+		return
+	}
+
+	testID, err := uuid.Parse(testIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid test ID")
+		return
+	}
+
+	// Get user ID and role from context
+	userIDStr, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		h.respondError(w, http.StatusUnauthorized, "user not authenticated")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "invalid user ID")
+		return
+	}
+
+	userRole, ok := middleware.GetUserRole(r.Context())
+	if !ok {
+		h.respondError(w, http.StatusUnauthorized, "user role not found")
+		return
+	}
+
+	// Execute use case
+	testResult, err := h.getTestUC.Execute(r.Context(), test.GetTestRequest{
+		TestID:   testID,
+		UserID:   userID,
+		UserRole: userRole,
+	})
+
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	// Convert to response format
+	testResponse := TestResponse{
+		ID:           testResult.ID.String(),
+		CreatorID:    testResult.CreatorID.String(),
+		Title:        testResult.Title,
+		Description:  testResult.Description,
+		AllowRetakes: testResult.AllowRetakes,
+		IsPublished:  testResult.IsPublished,
+		CreatedAt:    testResult.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:    testResult.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+
+	h.respondJSON(w, http.StatusOK, testResponse)
 }
 
 // CreateTest handles test creation
