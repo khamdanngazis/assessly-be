@@ -106,6 +106,20 @@ else
     exit 1
 fi
 
+# 4.6 Get Single Test (Creator)
+echo -e "\n${BLUE}4️⃣.6️⃣ Getting Test Details${NC}"
+GET_TEST_RESPONSE=$(curl -s -X GET "$API_URL/api/v1/tests/$TEST_ID" \
+  -H "Authorization: Bearer $CREATOR_TOKEN")
+
+echo "Response: $GET_TEST_RESPONSE"
+
+if echo "$GET_TEST_RESPONSE" | grep -q '"id"' && echo "$GET_TEST_RESPONSE" | grep -q "$TEST_ID"; then
+    echo -e "${GREEN}✅ Test details retrieved successfully${NC}"
+else
+    echo -e "${RED}❌ Failed to get test details${NC}"
+    exit 1
+fi
+
 # 5. Add Questions
 echo -e "\n${BLUE}5️⃣ Adding Questions to Test${NC}"
 

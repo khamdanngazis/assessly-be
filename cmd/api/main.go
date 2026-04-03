@@ -94,6 +94,7 @@ func main() {
 	addQuestionUC := testUC.NewAddQuestionUseCase(questionRepo, testRepo, slog.Default())
 	publishTestUC := testUC.NewPublishTestUseCase(testRepo, questionRepo, slog.Default())
 	listTestsUC := testUC.NewListTestsUseCase(testRepo)
+	getTestUC := testUC.NewGetTestUseCase(testRepo)
 	
 	// Initialize submission use cases
 	generateAccessTokenUC := submissionUC.NewGenerateAccessTokenUseCase(
@@ -137,7 +138,7 @@ func main() {
 	
 	// Initialize HTTP handlers
 	authHandler := handler.NewAuthHandler(registerUC, loginUC, requestResetUC, resetPasswordUC, slog.Default())
-	testHandler := handler.NewTestHandler(createTestUC, publishTestUC, listTestsUC, slog.Default())
+	testHandler := handler.NewTestHandler(createTestUC, publishTestUC, listTestsUC, getTestUC, slog.Default())
 	questionHandler := handler.NewQuestionHandler(addQuestionUC, slog.Default())
 	submissionHandler := handler.NewSubmissionHandler(
 		generateAccessTokenUC,

@@ -32,6 +32,7 @@ func (r *Router) SetupRoutes(
 	},
 	testHandler interface {
 		ListTests(w http.ResponseWriter, r *http.Request)
+		GetTest(w http.ResponseWriter, r *http.Request)
 		CreateTest(w http.ResponseWriter, r *http.Request)
 		PublishTest(w http.ResponseWriter, r *http.Request)
 	},
@@ -100,22 +101,27 @@ func (r *Router) SetupRoutes(
 
 			// Test creator endpoints (requires creator role)
 			r.Route("/tests", func(r chi.Router) {
-				// Creator-only routes
-				r.Group(func(r chi.Router) {
-					r.Use(middleware.RequireRole("creator", logger))
+			// Routes accessible by both creators and reviewers (auth required)
+			// GET /{testID} - View test details (with role-based access control in use case)
+			if testHandler != nil {
+				r.Get("/{testID}", testHandler.GetTest)
+			} else {
+				r.Get("/{testID}", notImplementedHandler)
+			}
 
-					if testHandler != nil {
-						r.Get("/", testHandler.ListTests)
-						r.Post("/", testHandler.CreateTest)
-						r.Post("/{testID}/publish", testHandler.PublishTest)
-					} else {
-						r.Get("/", notImplementedHandler)
-						r.Post("/", notImplementedHandler)
-						r.Post("/{testID}/publish", notImplementedHandler)
-					}
-					r.Get("/{testID}", notImplementedHandler)
-					r.Put("/{testID}", notImplementedHandler)
-					r.Delete("/{testID}", notImplementedHandler)
+			// Creator-only routes
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("creator", logger))
+
+				if testHandler != nil {
+					r.Get("/", testHandler.ListTests)
+					r.Post("/", testHandler.CreateTest)
+					r.Post("/{testID}/publish", testHandler.PublishTest)
+				} else {
+					r.Get("/", notImplementedHandler)
+					r.Post("/", notImplementedHandler)
+					r.Post("/{testID}/publish", notImplementedHandler)
+				}
 
 					// Questions
 					if questionHandler != nil {

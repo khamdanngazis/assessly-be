@@ -771,3 +771,206 @@ func TestListTests_PaginationMaxLimit(t *testing.T) {
 	mockTestRepo.AssertExpectations(t)
 }
 
+
+// GetTestUseCase Tests
+
+func TestGetTest_CreatorSuccess(t *testing.T) {
+// Arrange
+mockTestRepo := new(MockTestRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo)
+
+creatorID := uuid.New()
+testID := uuid.New()
+expectedTest := &domain.Test{
+ID:          testID,
+CreatorID:   creatorID,
+Title:       "Test Title",
+Description: "Test Description",
+IsPublished: false,
+}
+
+req := test.GetTestRequest{
+TestID:   testID,
+UserID:   creatorID,
+UserRole: "creator",
+}
+
+mockTestRepo.On("FindByID", mock.Anything, testID).Return(expectedTest, nil)
+
+// Act
+result, err := useCase.Execute(context.Background(), req)
+
+// Assert
+assert.NoError(t, err)
+assert.NotNil(t, result)
+assert.Equal(t, testID, result.ID)
+assert.Equal(t, creatorID, result.CreatorID)
+mockTestRepo.AssertExpectations(t)
+}
+
+func TestGetTest_CreatorCannotAccessOthersTest(t *testing.T) {
+// Arrange
+mockTestRepo := new(MockTestRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo)
+
+creatorID := uuid.New()
+otherCreatorID := uuid.New()
+testID := uuid.New()
+
+otherTest := &domain.Test{
+ID:          testID,
+CreatorID:   otherCreatorID, // Different creator
+Title:       "Other Test",
+Description: "Test Description",
+IsPublished: true,
+}
+
+req := test.GetTestRequest{
+TestID:   testID,
+UserID:   creatorID,
+UserRole: "creator",
+}
+
+mockTestRepo.On("FindByID", mock.Anything, testID).Return(otherTest, nil)
+
+// Act
+result, err := useCase.Execute(context.Background(), req)
+
+// Assert
+assert.Error(t, err)
+assert.Nil(t, result)
+var authErr domain.ErrUnauthorized
+assert.ErrorAs(t, err, &authErr)
+mockTestRepo.AssertExpectations(t)
+}
+
+func TestGetTest_ReviewerCanAccessPublishedTest(t *testing.T) {
+// Arrange
+mockTestRepo := new(MockTestRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo)
+
+reviewerID := uuid.New()
+testID := uuid.New()
+publishedTest := &domain.Test{
+ID:          testID,
+CreatorID:   uuid.New(),
+Title:       "Published Test",
+Description: "Test Description",
+IsPublished: true,
+}
+
+req := test.GetTestRequest{
+TestID:   testID,
+UserID:   reviewerID,
+UserRole: "reviewer",
+}
+
+mockTestRepo.On("FindByID", mock.Anything, testID).Return(publishedTest, nil)
+
+// Act
+result, err := useCase.Execute(context.Background(), req)
+
+// Assert
+assert.NoError(t, err)
+assert.NotNil(t, result)
+assert.Equal(t, testID, result.ID)
+assert.True(t, result.IsPublished)
+mockTestRepo.AssertExpectations(t)
+}
+
+func TestGetTest_ReviewerCannotAccessDraftTest(t *testing.T) {
+// Arrange
+mockTestRepo := new(MockTestRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo)
+
+reviewerID := uuid.New()
+testID := uuid.New()
+draftTest := &domain.Test{
+ID:          testID,
+CreatorID:   uuid.New(),
+Title:       "Draft Test",
+Description: "Test Description",
+IsPublished: false, // Not published
+}
+
+req := test.GetTestRequest{
+TestID:   testID,
+UserID:   reviewerID,
+UserRole: "reviewer",
+}
+
+mockTestRepo.On("FindByID", mock.Anything, testID).Return(draftTest, nil)
+
+// Act
+result, err := useCase.Execute(context.Background(), req)
+
+// Assert
+assert.Error(t, err)
+assert.Nil(t, result)
+var authErr domain.ErrUnauthorized
+assert.ErrorAs(t, err, &authErr)
+mockTestRepo.AssertExpectations(t)
+}
+
+func TestGetTest_TestNotFound(t *testing.T) {
+// Arrange
+mockTestRepo := new(MockTestRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo)
+
+creatorID := uuid.New()
+testID := uuid.New()
+
+req := test.GetTestRequest{
+TestID:   testID,
+UserID:   creatorID,
+UserRole: "creator",
+}
+
+mockTestRepo.On("FindByID", mock.Anything, testID).
+Return(nil, domain.ErrNotFound{Resource: "test", ID: testID.String()})
+
+// Act
+result, err := useCase.Execute(context.Background(), req)
+
+// Assert
+assert.Error(t, err)
+assert.Nil(t, result)
+var notFoundErr domain.ErrNotFound
+assert.ErrorAs(t, err, &notFoundErr)
+mockTestRepo.AssertExpectations(t)
+}
+
+func TestGetTest_UnauthorizedRole(t *testing.T) {
+// Arrange
+mockTestRepo := new(MockTestRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo)
+
+testID := uuid.New()
+participantID := uuid.New()
+
+someTest := &domain.Test{
+ID:          testID,
+CreatorID:   uuid.New(),
+Title:       "Test",
+Description: "Test Description",
+IsPublished: true,
+}
+
+req := test.GetTestRequest{
+TestID:   testID,
+UserID:   participantID,
+UserRole: "participant", // Invalid role
+}
+
+mockTestRepo.On("FindByID", mock.Anything, testID).Return(someTest, nil)
+
+// Act
+result, err := useCase.Execute(context.Background(), req)
+
+// Assert
+assert.Error(t, err)
+assert.Nil(t, result)
+var authErr domain.ErrUnauthorized
+assert.ErrorAs(t, err, &authErr)
+mockTestRepo.AssertExpectations(t)
+}
