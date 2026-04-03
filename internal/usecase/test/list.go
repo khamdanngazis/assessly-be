@@ -18,19 +18,22 @@ type ListTestsRequest struct {
 
 // ListTestsResponse represents the list tests response
 type ListTestsResponse struct {
-	Tests []*domain.Test
-	Total int
+	Tests     []*domain.Test
+	Questions map[string][]*domain.Question // Map of testID -> questions
+	Total     int
 }
 
 // ListTestsUseCase handles listing tests
 type ListTestsUseCase struct {
-	testRepo domain.TestRepository
+	testRepo     domain.TestRepository
+	questionRepo domain.QuestionRepository
 }
 
 // NewListTestsUseCase creates a new list tests use case
-func NewListTestsUseCase(testRepo domain.TestRepository) *ListTestsUseCase {
+func NewListTestsUseCase(testRepo domain.TestRepository, questionRepo domain.QuestionRepository) *ListTestsUseCase {
 	return &ListTestsUseCase{
-		testRepo: testRepo,
+		testRepo:     testRepo,
+		questionRepo: questionRepo,
 	}
 }
 
@@ -93,8 +96,21 @@ func (uc *ListTestsUseCase) Execute(ctx context.Context, req ListTestsRequest) (
 		}
 	}
 
+	// Fetch questions for all tests
+	questionsMap := make(map[string][]*domain.Question)
+	for _, t := range tests {
+		questions, err := uc.questionRepo.FindByTestID(ctx, t.ID)
+		if err != nil {
+			// Log error but don't fail the request
+			// We can return tests without questions if question fetch fails
+			continue
+		}
+		questionsMap[t.ID.String()] = questions
+	}
+
 	return &ListTestsResponse{
-		Tests: tests,
-		Total: len(tests),
+		Tests:     tests,
+		Questions: questionsMap,
+		Total:     len(tests),
 	}, nil
 }

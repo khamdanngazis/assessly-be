@@ -14,20 +14,28 @@ type GetTestRequest struct {
 	UserRole string // "creator" or "reviewer"
 }
 
+// GetTestResponse represents the get test response
+type GetTestResponse struct {
+	Test      *domain.Test
+	Questions []*domain.Question
+}
+
 // GetTestUseCase handles getting a single test by ID
 type GetTestUseCase struct {
-	testRepo domain.TestRepository
+	testRepo     domain.TestRepository
+	questionRepo domain.QuestionRepository
 }
 
 // NewGetTestUseCase creates a new get test use case
-func NewGetTestUseCase(testRepo domain.TestRepository) *GetTestUseCase {
+func NewGetTestUseCase(testRepo domain.TestRepository, questionRepo domain.QuestionRepository) *GetTestUseCase {
 	return &GetTestUseCase{
-		testRepo: testRepo,
+		testRepo:     testRepo,
+		questionRepo: questionRepo,
 	}
 }
 
 // Execute retrieves a test by ID with authorization
-func (uc *GetTestUseCase) Execute(ctx context.Context, req GetTestRequest) (*domain.Test, error) {
+func (uc *GetTestUseCase) Execute(ctx context.Context, req GetTestRequest) (*GetTestResponse, error) {
 	// Find the test
 	test, err := uc.testRepo.FindByID(ctx, req.TestID)
 	if err != nil {
@@ -50,5 +58,15 @@ func (uc *GetTestUseCase) Execute(ctx context.Context, req GetTestRequest) (*dom
 		return nil, domain.ErrUnauthorized{Message: "insufficient permissions"}
 	}
 
-	return test, nil
+	// Fetch questions for the test
+	questions, err := uc.questionRepo.FindByTestID(ctx, test.ID)
+	if err != nil {
+		// If questions fetch fails, return empty questions array
+		questions = []*domain.Question{}
+	}
+
+	return &GetTestResponse{
+		Test:      test,
+		Questions: questions,
+	}, nil
 }

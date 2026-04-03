@@ -48,14 +48,15 @@ type CreateTestRequest struct {
 
 // TestResponse represents a test in responses
 type TestResponse struct {
-	ID           string `json:"id"`
-	CreatorID    string `json:"creator_id"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
-	AllowRetakes bool   `json:"allow_retakes"`
-	IsPublished  bool   `json:"is_published"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	ID           string             `json:"id"`
+	CreatorID    string             `json:"creator_id"`
+	Title        string             `json:"title"`
+	Description  string             `json:"description"`
+	AllowRetakes bool               `json:"allow_retakes"`
+	IsPublished  bool               `json:"is_published"`
+	Questions    []QuestionResponse `json:"questions,omitempty"`
+	CreatedAt    string             `json:"created_at"`
+	UpdatedAt    string             `json:"updated_at"`
 }
 
 // ListTests handles listing tests based on user role
@@ -117,6 +118,20 @@ func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
 	// Convert tests to response format
 	testResponses := make([]TestResponse, len(resp.Tests))
 	for i, t := range resp.Tests {
+		// Get questions for this test from the questions map
+		questions := resp.Questions[t.ID.String()]
+		questionResponses := make([]QuestionResponse, len(questions))
+		for j, q := range questions {
+			questionResponses[j] = QuestionResponse{
+				ID:             q.ID.String(),
+				TestID:         q.TestID.String(),
+				Text:           q.Text,
+				ExpectedAnswer: q.ExpectedAnswer,
+				OrderNum:       q.OrderNum,
+				CreatedAt:      q.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			}
+		}
+
 		testResponses[i] = TestResponse{
 			ID:           t.ID.String(),
 			CreatorID:    t.CreatorID.String(),
@@ -124,6 +139,7 @@ func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
 			Description:  t.Description,
 			AllowRetakes: t.AllowRetakes,
 			IsPublished:  t.IsPublished,
+			Questions:    questionResponses,
 			CreatedAt:    t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:    t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		}
@@ -174,7 +190,7 @@ func (h *TestHandler) GetTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute use case
-	testResult, err := h.getTestUC.Execute(r.Context(), test.GetTestRequest{
+	result, err := h.getTestUC.Execute(r.Context(), test.GetTestRequest{
 		TestID:   testID,
 		UserID:   userID,
 		UserRole: userRole,
@@ -185,16 +201,30 @@ func (h *TestHandler) GetTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert questions to response format
+	questionResponses := make([]QuestionResponse, len(result.Questions))
+	for i, q := range result.Questions {
+		questionResponses[i] = QuestionResponse{
+			ID:             q.ID.String(),
+			TestID:         q.TestID.String(),
+			Text:           q.Text,
+			ExpectedAnswer: q.ExpectedAnswer,
+			OrderNum:       q.OrderNum,
+			CreatedAt:      q.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+	}
+
 	// Convert to response format
 	testResponse := TestResponse{
-		ID:           testResult.ID.String(),
-		CreatorID:    testResult.CreatorID.String(),
-		Title:        testResult.Title,
-		Description:  testResult.Description,
-		AllowRetakes: testResult.AllowRetakes,
-		IsPublished:  testResult.IsPublished,
-		CreatedAt:    testResult.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:    testResult.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:           result.Test.ID.String(),
+		CreatorID:    result.Test.CreatorID.String(),
+		Title:        result.Test.Title,
+		Description:  result.Test.Description,
+		AllowRetakes: result.Test.AllowRetakes,
+		IsPublished:  result.Test.IsPublished,
+		Questions:    questionResponses,
+		CreatedAt:    result.Test.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:    result.Test.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 
 	h.respondJSON(w, http.StatusOK, testResponse)

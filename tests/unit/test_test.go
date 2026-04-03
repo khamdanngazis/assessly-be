@@ -501,12 +501,15 @@ func TestPublishTest_NoQuestions(t *testing.T) {
 func TestListTests_CreatorSuccess(t *testing.T) {
 	// Arrange
 	mockTestRepo := new(MockTestRepository)
-	useCase := test.NewListTestsUseCase(mockTestRepo)
+	mockQuestionRepo := new(MockQuestionRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo, mockQuestionRepo)
 
 	creatorID := uuid.New()
+	testID1 := uuid.New()
+	testID2 := uuid.New()
 	expectedTests := []*domain.Test{
 		{
-			ID:          uuid.New(),
+			ID:          testID1,
 			CreatorID:   creatorID,
 			Title:       "Test 1",
 			Description: "Description 1",
@@ -515,7 +518,7 @@ func TestListTests_CreatorSuccess(t *testing.T) {
 			UpdatedAt:   time.Now(),
 		},
 		{
-			ID:          uuid.New(),
+			ID:          testID2,
 			CreatorID:   creatorID,
 			Title:       "Test 2",
 			Description: "Description 2",
@@ -535,6 +538,8 @@ func TestListTests_CreatorSuccess(t *testing.T) {
 
 	mockTestRepo.On("FindByCreatorID", mock.Anything, creatorID, 20, 0).
 		Return(expectedTests, nil)
+	mockQuestionRepo.On("FindByTestID", mock.Anything, testID1).Return([]*domain.Question{}, nil)
+	mockQuestionRepo.On("FindByTestID", mock.Anything, testID2).Return([]*domain.Question{}, nil)
 
 	// Act
 	result, err := useCase.Execute(context.Background(), req)
@@ -547,17 +552,21 @@ func TestListTests_CreatorSuccess(t *testing.T) {
 	assert.Equal(t, "Test 1", result.Tests[0].Title)
 	assert.Equal(t, "Test 2", result.Tests[1].Title)
 	mockTestRepo.AssertExpectations(t)
+	mockQuestionRepo.AssertExpectations(t)
 }
 
 func TestListTests_CreatorFilterPublished(t *testing.T) {
 	// Arrange
 	mockTestRepo := new(MockTestRepository)
-	useCase := test.NewListTestsUseCase(mockTestRepo)
+	mockQuestionRepo := new(MockQuestionRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo, mockQuestionRepo)
 
 	creatorID := uuid.New()
+	publishedID := uuid.New()
+	draftID := uuid.New()
 	allTests := []*domain.Test{
 		{
-			ID:          uuid.New(),
+			ID:          publishedID,
 			CreatorID:   creatorID,
 			Title:       "Published Test",
 			IsPublished: true,
@@ -565,7 +574,7 @@ func TestListTests_CreatorFilterPublished(t *testing.T) {
 			UpdatedAt:   time.Now(),
 		},
 		{
-			ID:          uuid.New(),
+			ID:          draftID,
 			CreatorID:   creatorID,
 			Title:       "Draft Test",
 			IsPublished: false,
@@ -584,6 +593,7 @@ func TestListTests_CreatorFilterPublished(t *testing.T) {
 
 	mockTestRepo.On("FindByCreatorID", mock.Anything, creatorID, 20, 0).
 		Return(allTests, nil)
+	mockQuestionRepo.On("FindByTestID", mock.Anything, publishedID).Return([]*domain.Question{}, nil)
 
 	// Act
 	result, err := useCase.Execute(context.Background(), req)
@@ -596,17 +606,21 @@ func TestListTests_CreatorFilterPublished(t *testing.T) {
 	assert.Equal(t, "Published Test", result.Tests[0].Title)
 	assert.True(t, result.Tests[0].IsPublished)
 	mockTestRepo.AssertExpectations(t)
+	mockQuestionRepo.AssertExpectations(t)
 }
 
 func TestListTests_CreatorFilterDraft(t *testing.T) {
 	// Arrange
 	mockTestRepo := new(MockTestRepository)
-	useCase := test.NewListTestsUseCase(mockTestRepo)
+	mockQuestionRepo := new(MockQuestionRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo, mockQuestionRepo)
 
 	creatorID := uuid.New()
+	draftID := uuid.New()
+	publishedID := uuid.New()
 	allTests := []*domain.Test{
 		{
-			ID:          uuid.New(),
+			ID:          publishedID,
 			CreatorID:   creatorID,
 			Title:       "Published Test",
 			IsPublished: true,
@@ -614,7 +628,7 @@ func TestListTests_CreatorFilterDraft(t *testing.T) {
 			UpdatedAt:   time.Now(),
 		},
 		{
-			ID:          uuid.New(),
+			ID:          draftID,
 			CreatorID:   creatorID,
 			Title:       "Draft Test",
 			IsPublished: false,
@@ -633,6 +647,7 @@ func TestListTests_CreatorFilterDraft(t *testing.T) {
 
 	mockTestRepo.On("FindByCreatorID", mock.Anything, creatorID, 20, 0).
 		Return(allTests, nil)
+	mockQuestionRepo.On("FindByTestID", mock.Anything, draftID).Return([]*domain.Question{}, nil)
 
 	// Act
 	result, err := useCase.Execute(context.Background(), req)
@@ -645,17 +660,21 @@ func TestListTests_CreatorFilterDraft(t *testing.T) {
 	assert.Equal(t, "Draft Test", result.Tests[0].Title)
 	assert.False(t, result.Tests[0].IsPublished)
 	mockTestRepo.AssertExpectations(t)
+	mockQuestionRepo.AssertExpectations(t)
 }
 
 func TestListTests_ReviewerSuccess(t *testing.T) {
 	// Arrange
 	mockTestRepo := new(MockTestRepository)
-	useCase := test.NewListTestsUseCase(mockTestRepo)
+	mockQuestionRepo := new(MockQuestionRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo, mockQuestionRepo)
 
 	reviewerID := uuid.New()
+	testID1 := uuid.New()
+	testID2 := uuid.New()
 	expectedTests := []*domain.Test{
 		{
-			ID:          uuid.New(),
+			ID:          testID1,
 			CreatorID:   uuid.New(),
 			Title:       "Published Test 1",
 			IsPublished: true,
@@ -663,7 +682,7 @@ func TestListTests_ReviewerSuccess(t *testing.T) {
 			UpdatedAt:   time.Now(),
 		},
 		{
-			ID:          uuid.New(),
+			ID:          testID2,
 			CreatorID:   uuid.New(),
 			Title:       "Published Test 2",
 			IsPublished: true,
@@ -682,6 +701,8 @@ func TestListTests_ReviewerSuccess(t *testing.T) {
 
 	mockTestRepo.On("FindPublished", mock.Anything, 20, 0).
 		Return(expectedTests, nil)
+	mockQuestionRepo.On("FindByTestID", mock.Anything, testID1).Return([]*domain.Question{}, nil)
+	mockQuestionRepo.On("FindByTestID", mock.Anything, testID2).Return([]*domain.Question{}, nil)
 
 	// Act
 	result, err := useCase.Execute(context.Background(), req)
@@ -692,12 +713,14 @@ func TestListTests_ReviewerSuccess(t *testing.T) {
 	assert.Equal(t, 2, result.Total)
 	assert.Len(t, result.Tests, 2)
 	mockTestRepo.AssertExpectations(t)
+	mockQuestionRepo.AssertExpectations(t)
 }
 
 func TestListTests_UnauthorizedRole(t *testing.T) {
 	// Arrange
 	mockTestRepo := new(MockTestRepository)
-	useCase := test.NewListTestsUseCase(mockTestRepo)
+	mockQuestionRepo := new(MockQuestionRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo, mockQuestionRepo)
 
 	req := test.ListTestsRequest{
 		UserID:   uuid.New(),
@@ -722,7 +745,8 @@ func TestListTests_UnauthorizedRole(t *testing.T) {
 func TestListTests_PaginationDefaults(t *testing.T) {
 	// Arrange
 	mockTestRepo := new(MockTestRepository)
-	useCase := test.NewListTestsUseCase(mockTestRepo)
+	mockQuestionRepo := new(MockQuestionRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo, mockQuestionRepo)
 
 	creatorID := uuid.New()
 	req := test.ListTestsRequest{
@@ -748,7 +772,8 @@ func TestListTests_PaginationDefaults(t *testing.T) {
 func TestListTests_PaginationMaxLimit(t *testing.T) {
 	// Arrange
 	mockTestRepo := new(MockTestRepository)
-	useCase := test.NewListTestsUseCase(mockTestRepo)
+	mockQuestionRepo := new(MockQuestionRepository)
+	useCase := test.NewListTestsUseCase(mockTestRepo, mockQuestionRepo)
 
 	creatorID := uuid.New()
 	req := test.ListTestsRequest{
@@ -777,7 +802,8 @@ func TestListTests_PaginationMaxLimit(t *testing.T) {
 func TestGetTest_CreatorSuccess(t *testing.T) {
 // Arrange
 mockTestRepo := new(MockTestRepository)
-useCase := test.NewGetTestUseCase(mockTestRepo)
+mockQuestionRepo := new(MockQuestionRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo, mockQuestionRepo)
 
 creatorID := uuid.New()
 testID := uuid.New()
@@ -788,6 +814,7 @@ Title:       "Test Title",
 Description: "Test Description",
 IsPublished: false,
 }
+expectedQuestions := []*domain.Question{}
 
 req := test.GetTestRequest{
 TestID:   testID,
@@ -796,6 +823,7 @@ UserRole: "creator",
 }
 
 mockTestRepo.On("FindByID", mock.Anything, testID).Return(expectedTest, nil)
+mockQuestionRepo.On("FindByTestID", mock.Anything, testID).Return(expectedQuestions, nil)
 
 // Act
 result, err := useCase.Execute(context.Background(), req)
@@ -803,15 +831,18 @@ result, err := useCase.Execute(context.Background(), req)
 // Assert
 assert.NoError(t, err)
 assert.NotNil(t, result)
-assert.Equal(t, testID, result.ID)
-assert.Equal(t, creatorID, result.CreatorID)
+assert.Equal(t, testID, result.Test.ID)
+assert.Equal(t, creatorID, result.Test.CreatorID)
+assert.NotNil(t, result.Questions)
 mockTestRepo.AssertExpectations(t)
+mockQuestionRepo.AssertExpectations(t)
 }
 
 func TestGetTest_CreatorCannotAccessOthersTest(t *testing.T) {
 // Arrange
 mockTestRepo := new(MockTestRepository)
-useCase := test.NewGetTestUseCase(mockTestRepo)
+mockQuestionRepo := new(MockQuestionRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo, mockQuestionRepo)
 
 creatorID := uuid.New()
 otherCreatorID := uuid.New()
@@ -847,7 +878,8 @@ mockTestRepo.AssertExpectations(t)
 func TestGetTest_ReviewerCanAccessPublishedTest(t *testing.T) {
 // Arrange
 mockTestRepo := new(MockTestRepository)
-useCase := test.NewGetTestUseCase(mockTestRepo)
+mockQuestionRepo := new(MockQuestionRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo, mockQuestionRepo)
 
 reviewerID := uuid.New()
 testID := uuid.New()
@@ -866,6 +898,7 @@ UserRole: "reviewer",
 }
 
 mockTestRepo.On("FindByID", mock.Anything, testID).Return(publishedTest, nil)
+mockQuestionRepo.On("FindByTestID", mock.Anything, testID).Return([]*domain.Question{}, nil)
 
 // Act
 result, err := useCase.Execute(context.Background(), req)
@@ -873,15 +906,17 @@ result, err := useCase.Execute(context.Background(), req)
 // Assert
 assert.NoError(t, err)
 assert.NotNil(t, result)
-assert.Equal(t, testID, result.ID)
-assert.True(t, result.IsPublished)
+assert.Equal(t, testID, result.Test.ID)
+assert.True(t, result.Test.IsPublished)
 mockTestRepo.AssertExpectations(t)
+mockQuestionRepo.AssertExpectations(t)
 }
 
 func TestGetTest_ReviewerCannotAccessDraftTest(t *testing.T) {
 // Arrange
 mockTestRepo := new(MockTestRepository)
-useCase := test.NewGetTestUseCase(mockTestRepo)
+mockQuestionRepo := new(MockQuestionRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo, mockQuestionRepo)
 
 reviewerID := uuid.New()
 testID := uuid.New()
@@ -915,7 +950,8 @@ mockTestRepo.AssertExpectations(t)
 func TestGetTest_TestNotFound(t *testing.T) {
 // Arrange
 mockTestRepo := new(MockTestRepository)
-useCase := test.NewGetTestUseCase(mockTestRepo)
+mockQuestionRepo := new(MockQuestionRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo, mockQuestionRepo)
 
 creatorID := uuid.New()
 testID := uuid.New()
@@ -943,7 +979,8 @@ mockTestRepo.AssertExpectations(t)
 func TestGetTest_UnauthorizedRole(t *testing.T) {
 // Arrange
 mockTestRepo := new(MockTestRepository)
-useCase := test.NewGetTestUseCase(mockTestRepo)
+mockQuestionRepo := new(MockQuestionRepository)
+useCase := test.NewGetTestUseCase(mockTestRepo, mockQuestionRepo)
 
 testID := uuid.New()
 participantID := uuid.New()
