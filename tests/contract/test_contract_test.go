@@ -29,7 +29,7 @@ func TestCreateTestContract(t *testing.T) {
 
 	// Create real use case with mocks
 	createTestUC := testUC.NewCreateTestUseCase(mockTestRepo, logger)
-	testHandler := handler.NewTestHandler(createTestUC, nil, logger)
+	testHandler := handler.NewTestHandler(createTestUC, nil, nil, nil, logger)
 
 	t.Run("should return 201 with correct response schema on successful test creation", func(t *testing.T) {
 		// Prepare mock response
@@ -50,11 +50,11 @@ func TestCreateTestContract(t *testing.T) {
 		reqJSON, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests", bytes.NewReader(reqJSON))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		// Add user_id to context (simulating JWT middleware)
 		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
 		req = req.WithContext(ctx)
-		
+
 		w := httptest.NewRecorder()
 
 		// Execute
@@ -139,9 +139,9 @@ func TestCreateTestContract(t *testing.T) {
 
 	t.Run("should return 400 when validation fails", func(t *testing.T) {
 		creatorID := uuid.New()
-		
+
 		reqBody := map[string]interface{}{
-			"title":         "",  // Empty title
+			"title":         "", // Empty title
 			"description":   "Test description",
 			"allow_retakes": false,
 		}
@@ -172,11 +172,11 @@ func TestAddQuestionContract(t *testing.T) {
 
 	// Create real use case with mocks
 	addQuestionUC := testUC.NewAddQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
-	questionHandler := handler.NewQuestionHandler(addQuestionUC, logger)
+	questionHandler := handler.NewQuestionHandler(addQuestionUC, nil, nil, logger)
 
 	t.Run("should return 201 with correct response schema on successful question addition", func(t *testing.T) {
 		testID := uuid.New()
-		
+
 		// Mock test exists and is not published
 		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
 			return &domain.Test{
@@ -184,7 +184,7 @@ func TestAddQuestionContract(t *testing.T) {
 				IsPublished: false,
 			}, nil
 		}
-		
+
 		mockQuestionRepo.CreateFunc = func(ctx context.Context, question *domain.Question) error {
 			question.ID = uuid.New()
 			question.CreatedAt = time.Now()
@@ -200,12 +200,12 @@ func TestAddQuestionContract(t *testing.T) {
 		reqJSON, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/questions", bytes.NewReader(reqJSON))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		// Add testID to chi context
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", testID.String())
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		// Execute
@@ -252,11 +252,11 @@ func TestAddQuestionContract(t *testing.T) {
 		reqJSON, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/invalid-uuid/questions", bytes.NewReader(reqJSON))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", "invalid-uuid")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		questionHandler.AddQuestion(w, req)
@@ -271,7 +271,7 @@ func TestAddQuestionContract(t *testing.T) {
 
 	t.Run("should return 404 when test not found", func(t *testing.T) {
 		testID := uuid.New()
-		
+
 		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
 			return nil, domain.ErrNotFound{Resource: "test", ID: id.String()}
 		}
@@ -283,11 +283,11 @@ func TestAddQuestionContract(t *testing.T) {
 		reqJSON, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/questions", bytes.NewReader(reqJSON))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", testID.String())
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		questionHandler.AddQuestion(w, req)
@@ -302,12 +302,12 @@ func TestAddQuestionContract(t *testing.T) {
 
 	t.Run("should return 400 when test is already published", func(t *testing.T) {
 		testID := uuid.New()
-		
+
 		// Mock test exists but is published
 		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
 			return &domain.Test{
 				ID:          testID,
-				IsPublished: true,  // Already published
+				IsPublished: true, // Already published
 			}, nil
 		}
 
@@ -318,11 +318,11 @@ func TestAddQuestionContract(t *testing.T) {
 		reqJSON, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/questions", bytes.NewReader(reqJSON))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", testID.String())
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		questionHandler.AddQuestion(w, req)
@@ -345,12 +345,12 @@ func TestPublishTestContract(t *testing.T) {
 
 	// Create real use case with mocks
 	publishTestUC := testUC.NewPublishTestUseCase(mockTestRepo, mockQuestionRepo, logger)
-	testHandler := handler.NewTestHandler(nil, publishTestUC, logger)
+	testHandler := handler.NewTestHandler(nil, publishTestUC, nil, nil, logger)
 
 	t.Run("should return 200 with correct response schema on successful publish", func(t *testing.T) {
 		testID := uuid.New()
 		creatorID := uuid.New()
-		
+
 		// Mock test exists and is not published, has questions
 		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
 			return &domain.Test{
@@ -363,11 +363,11 @@ func TestPublishTestContract(t *testing.T) {
 				UpdatedAt:   time.Now(),
 			}, nil
 		}
-		
+
 		mockQuestionRepo.CountByTestIDFunc = func(ctx context.Context, testID uuid.UUID) (int, error) {
-			return 3, nil  // Has 3 questions
+			return 3, nil // Has 3 questions
 		}
-		
+
 		mockTestRepo.UpdateFunc = func(ctx context.Context, test *domain.Test) error {
 			test.IsPublished = true
 			test.UpdatedAt = time.Now()
@@ -376,12 +376,12 @@ func TestPublishTestContract(t *testing.T) {
 
 		// Prepare request
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/publish", nil)
-		
+
 		// Add testID to chi context
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", testID.String())
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		// Execute
@@ -408,11 +408,11 @@ func TestPublishTestContract(t *testing.T) {
 
 	t.Run("should return 400 on invalid test ID", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/invalid-uuid/publish", nil)
-		
+
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", "invalid-uuid")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		testHandler.PublishTest(w, req)
@@ -427,17 +427,17 @@ func TestPublishTestContract(t *testing.T) {
 
 	t.Run("should return 404 when test not found", func(t *testing.T) {
 		testID := uuid.New()
-		
+
 		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
 			return nil, domain.ErrNotFound{Resource: "test", ID: id.String()}
 		}
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/publish", nil)
-		
+
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", testID.String())
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		testHandler.PublishTest(w, req)
@@ -452,24 +452,24 @@ func TestPublishTestContract(t *testing.T) {
 
 	t.Run("should return 400 when test has no questions", func(t *testing.T) {
 		testID := uuid.New()
-		
+
 		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
 			return &domain.Test{
 				ID:          testID,
 				IsPublished: false,
 			}, nil
 		}
-		
+
 		mockQuestionRepo.CountByTestIDFunc = func(ctx context.Context, testID uuid.UUID) (int, error) {
-			return 0, nil  // No questions
+			return 0, nil // No questions
 		}
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/publish", nil)
-		
+
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", testID.String())
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		testHandler.PublishTest(w, req)
@@ -484,20 +484,20 @@ func TestPublishTestContract(t *testing.T) {
 
 	t.Run("should return 400 when test is already published", func(t *testing.T) {
 		testID := uuid.New()
-		
+
 		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
 			return &domain.Test{
 				ID:          testID,
-				IsPublished: true,  // Already published
+				IsPublished: true, // Already published
 			}, nil
 		}
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tests/"+testID.String()+"/publish", nil)
-		
+
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("testID", testID.String())
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-		
+
 		w := httptest.NewRecorder()
 
 		testHandler.PublishTest(w, req)
@@ -514,9 +514,9 @@ func TestPublishTestContract(t *testing.T) {
 // Mock implementations for contract tests
 
 type MockTestRepository struct {
-	CreateFunc    func(ctx context.Context, test *domain.Test) error
-	FindByIDFunc  func(ctx context.Context, id uuid.UUID) (*domain.Test, error)
-	UpdateFunc    func(ctx context.Context, test *domain.Test) error
+	CreateFunc   func(ctx context.Context, test *domain.Test) error
+	FindByIDFunc func(ctx context.Context, id uuid.UUID) (*domain.Test, error)
+	UpdateFunc   func(ctx context.Context, test *domain.Test) error
 }
 
 func (m *MockTestRepository) Create(ctx context.Context, test *domain.Test) error {
@@ -553,8 +553,8 @@ func (m *MockTestRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 type MockQuestionRepository struct {
-	CreateFunc         func(ctx context.Context, question *domain.Question) error
-	CountByTestIDFunc  func(ctx context.Context, testID uuid.UUID) (int, error)
+	CreateFunc        func(ctx context.Context, question *domain.Question) error
+	CountByTestIDFunc func(ctx context.Context, testID uuid.UUID) (int, error)
 }
 
 func (m *MockQuestionRepository) Create(ctx context.Context, question *domain.Question) error {

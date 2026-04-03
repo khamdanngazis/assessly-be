@@ -96,8 +96,8 @@ func main() {
 	updateQuestionUC := testUC.NewUpdateQuestionUseCase(questionRepo, testRepo, slog.Default())
 	deleteQuestionUC := testUC.NewDeleteQuestionUseCase(questionRepo, testRepo, slog.Default())
 	publishTestUC := testUC.NewPublishTestUseCase(testRepo, questionRepo, slog.Default())
-	listTestsUC := testUC.NewListTestsUseCase(testRepo)
-	getTestUC := testUC.NewGetTestUseCase(testRepo)
+	listTestsUC := testUC.NewListTestsUseCase(testRepo, questionRepo)
+	getTestUC := testUC.NewGetTestUseCase(testRepo, questionRepo)
 	
 	// Initialize submission use cases
 	generateAccessTokenUC := submissionUC.NewGenerateAccessTokenUseCase(

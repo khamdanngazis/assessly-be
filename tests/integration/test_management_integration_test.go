@@ -43,7 +43,7 @@ func TestTestManagement_CreateAddQuestionsPublish(t *testing.T) {
 	questionRepo := postgres.NewQuestionRepository(pool)
 
 	// Create use cases
-	createTestUC :=testUC.NewCreateTestUseCase(testRepo, logger)
+	createTestUC := testUC.NewCreateTestUseCase(testRepo, logger)
 	addQuestionUC := testUC.NewAddQuestionUseCase(questionRepo, testRepo, logger)
 	publishTestUC := testUC.NewPublishTestUseCase(testRepo, questionRepo, logger)
 
@@ -137,7 +137,7 @@ func TestTestManagement_CreateAddQuestionsPublish(t *testing.T) {
 		questions, err := questionRepo.FindByTestID(ctx, testID)
 		require.NoError(t, err)
 		assert.Len(t, questions, 3)
-		
+
 		// Verify order
 		assert.Equal(t, 1, questions[0].OrderNum)
 		assert.Equal(t, 2, questions[1].OrderNum)
@@ -189,7 +189,7 @@ func TestTestManagement_CreateAddQuestionsPublish(t *testing.T) {
 		test, err := testRepo.FindByID(ctx, testID)
 		require.NoError(t, err)
 		assert.True(t, test.IsPublished)
-		
+
 		// Questions should still be there
 		questions, err := questionRepo.FindByTestID(ctx, testID)
 		require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestListTests_RoleBasedFiltering(t *testing.T) {
 	createTestUC := testUC.NewCreateTestUseCase(testRepo, logger)
 	addQuestionUC := testUC.NewAddQuestionUseCase(questionRepo, testRepo, logger)
 	publishTestUC := testUC.NewPublishTestUseCase(testRepo, questionRepo, logger)
-	listTestsUC := testUC.NewListTestsUseCase(testRepo)
+	listTestsUC := testUC.NewListTestsUseCase(testRepo, questionRepo)
 
 	// Create password hasher
 	passwordHasher := auth.NewPasswordHasher(10)
@@ -466,26 +466,26 @@ func TestListTests_RoleBasedFiltering(t *testing.T) {
 	// Cleanup
 	t.Run("Cleanup", func(t *testing.T) {
 		// Delete questions for all tests
-		_, err := pool.Exec(ctx, "DELETE FROM questions WHERE test_id IN ($1, $2, $3)", 
+		_, err := pool.Exec(ctx, "DELETE FROM questions WHERE test_id IN ($1, $2, $3)",
 			test1Creator1.ID, test2Creator1.ID, test1Creator2.ID)
 		require.NoError(t, err)
 
 		// Delete all tests
-		_, err = pool.Exec(ctx, "DELETE FROM tests WHERE id IN ($1, $2, $3)", 
+		_, err = pool.Exec(ctx, "DELETE FROM tests WHERE id IN ($1, $2, $3)",
 			test1Creator1.ID, test2Creator1.ID, test1Creator2.ID)
 		require.NoError(t, err)
 
 		// Delete users
-		_, err = pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2, $3)", 
+		_, err = pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2, $3)",
 			creator1.ID, creator2.ID, reviewer.ID)
 		require.NoError(t, err)
 	})
 }
 
 // Helper function to create a test with one question
-func createTestWithQuestion(t *testing.T, ctx context.Context, createTestUC *testUC.CreateTestUseCase, 
+func createTestWithQuestion(t *testing.T, ctx context.Context, createTestUC *testUC.CreateTestUseCase,
 	addQuestionUC *testUC.AddQuestionUseCase, creatorID uuid.UUID, title, description string) *domain.Test {
-	
+
 	// Create test
 	req := testUC.CreateTestRequest{
 		CreatorID:   creatorID,
@@ -510,182 +510,182 @@ func createTestWithQuestion(t *testing.T, ctx context.Context, createTestUC *tes
 
 // TestGetTest_RoleBasedAccess tests getting a single test with role-based access control
 func TestGetTest_RoleBasedAccess(t *testing.T) {
-if testing.Short() {
-t.Skip("Skipping integration test in short mode")
-}
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 
-loadTestEnv(t)
+	loadTestEnv(t)
 
-ctx := context.Background()
-logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-// Setup test database
-pool := setupTestDatabase(t, ctx)
-defer pool.Close()
+	// Setup test database
+	pool := setupTestDatabase(t, ctx)
+	defer pool.Close()
 
-// Setup repositories
-userRepo := postgres.NewUserRepository(pool)
-testRepo := postgres.NewTestRepository(pool)
-questionRepo := postgres.NewQuestionRepository(pool)
+	// Setup repositories
+	userRepo := postgres.NewUserRepository(pool)
+	testRepo := postgres.NewTestRepository(pool)
+	questionRepo := postgres.NewQuestionRepository(pool)
 
-// Create use cases
-createTestUC := testUC.NewCreateTestUseCase(testRepo, logger)
-addQuestionUC := testUC.NewAddQuestionUseCase(questionRepo, testRepo, logger)
-publishTestUC := testUC.NewPublishTestUseCase(testRepo, questionRepo, logger)
-getTestUC := testUC.NewGetTestUseCase(testRepo)
+	// Create use cases
+	createTestUC := testUC.NewCreateTestUseCase(testRepo, logger)
+	addQuestionUC := testUC.NewAddQuestionUseCase(questionRepo, testRepo, logger)
+	publishTestUC := testUC.NewPublishTestUseCase(testRepo, questionRepo, logger)
+	getTestUC := testUC.NewGetTestUseCase(testRepo, questionRepo)
 
-// Create password hasher
-passwordHasher := auth.NewPasswordHasher(10)
-hashedPassword, err := passwordHasher.Hash("password123")
-require.NoError(t, err)
+	// Create password hasher
+	passwordHasher := auth.NewPasswordHasher(10)
+	hashedPassword, err := passwordHasher.Hash("password123")
+	require.NoError(t, err)
 
-// Create creator 1
-creator1 := &domain.User{
-ID:           uuid.New(),
-Name:         "Creator One",
-Email:        fmt.Sprintf("creator1-%d@example.com", time.Now().Unix()),
-PasswordHash: hashedPassword,
-Role:         domain.UserRole("creator"),
-CreatedAt:    time.Now(),
-UpdatedAt:    time.Now(),
-}
-err = userRepo.Create(ctx, creator1)
-require.NoError(t, err)
+	// Create creator 1
+	creator1 := &domain.User{
+		ID:           uuid.New(),
+		Name:         "Creator One",
+		Email:        fmt.Sprintf("creator1-%d@example.com", time.Now().Unix()),
+		PasswordHash: hashedPassword,
+		Role:         domain.UserRole("creator"),
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	err = userRepo.Create(ctx, creator1)
+	require.NoError(t, err)
 
-// Create creator 2
-creator2 := &domain.User{
-ID:           uuid.New(),
-Name:         "Creator Two",
-Email:        fmt.Sprintf("creator2-%d@example.com", time.Now().Unix()),
-PasswordHash: hashedPassword,
-Role:         domain.UserRole("creator"),
-CreatedAt:    time.Now(),
-UpdatedAt:    time.Now(),
-}
-err = userRepo.Create(ctx, creator2)
-require.NoError(t, err)
+	// Create creator 2
+	creator2 := &domain.User{
+		ID:           uuid.New(),
+		Name:         "Creator Two",
+		Email:        fmt.Sprintf("creator2-%d@example.com", time.Now().Unix()),
+		PasswordHash: hashedPassword,
+		Role:         domain.UserRole("creator"),
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	err = userRepo.Create(ctx, creator2)
+	require.NoError(t, err)
 
-// Create reviewer
-reviewer := &domain.User{
-ID:           uuid.New(),
-Name:         "Test Reviewer",
-Email:        fmt.Sprintf("reviewer-%d@example.com", time.Now().Unix()),
-PasswordHash: hashedPassword,
-Role:         domain.UserRole("reviewer"),
-CreatedAt:    time.Now(),
-UpdatedAt:    time.Now(),
-}
-err = userRepo.Create(ctx, reviewer)
-require.NoError(t, err)
+	// Create reviewer
+	reviewer := &domain.User{
+		ID:           uuid.New(),
+		Name:         "Test Reviewer",
+		Email:        fmt.Sprintf("reviewer-%d@example.com", time.Now().Unix()),
+		PasswordHash: hashedPassword,
+		Role:         domain.UserRole("reviewer"),
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	err = userRepo.Create(ctx, reviewer)
+	require.NoError(t, err)
 
-// Creator 1: Create 1 published test and 1 draft test
-publishedTest := createTestWithQuestion(t, ctx, createTestUC, addQuestionUC, creator1.ID, "Creator1 Published Test", "Description 1")
-_, err = publishTestUC.Execute(ctx, testUC.PublishTestRequest{TestID: publishedTest.ID})
-require.NoError(t, err)
+	// Creator 1: Create 1 published test and 1 draft test
+	publishedTest := createTestWithQuestion(t, ctx, createTestUC, addQuestionUC, creator1.ID, "Creator1 Published Test", "Description 1")
+	_, err = publishTestUC.Execute(ctx, testUC.PublishTestRequest{TestID: publishedTest.ID})
+	require.NoError(t, err)
 
-draftTest := createTestWithQuestion(t, ctx, createTestUC, addQuestionUC, creator1.ID, "Creator1 Draft Test", "Description 2")
+	draftTest := createTestWithQuestion(t, ctx, createTestUC, addQuestionUC, creator1.ID, "Creator1 Draft Test", "Description 2")
 
-// Creator 2: Create 1 published test
-creator2Test := createTestWithQuestion(t, ctx, createTestUC, addQuestionUC, creator2.ID, "Creator2 Test", "Description 3")
-_, err = publishTestUC.Execute(ctx, testUC.PublishTestRequest{TestID: creator2Test.ID})
-require.NoError(t, err)
+	// Creator 2: Create 1 published test
+	creator2Test := createTestWithQuestion(t, ctx, createTestUC, addQuestionUC, creator2.ID, "Creator2 Test", "Description 3")
+	_, err = publishTestUC.Execute(ctx, testUC.PublishTestRequest{TestID: creator2Test.ID})
+	require.NoError(t, err)
 
-t.Run("Creator1_CanAccessOwnPublishedTest", func(t *testing.T) {
-result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
-TestID:   publishedTest.ID,
-UserID:   creator1.ID,
-UserRole: "creator",
-})
+	t.Run("Creator1_CanAccessOwnPublishedTest", func(t *testing.T) {
+		result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
+			TestID:   publishedTest.ID,
+			UserID:   creator1.ID,
+			UserRole: "creator",
+		})
 
-require.NoError(t, err)
-assert.NotNil(t, result)
-assert.Equal(t, publishedTest.ID, result.ID)
-assert.Equal(t, "Creator1 Published Test", result.Title)
-assert.True(t, result.IsPublished)
-})
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, publishedTest.ID, result.Test.ID)
+		assert.Equal(t, "Creator1 Published Test", result.Test.Title)
+		assert.True(t, result.Test.IsPublished)
+	})
 
-t.Run("Creator1_CanAccessOwnDraftTest", func(t *testing.T) {
-result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
-TestID:   draftTest.ID,
-UserID:   creator1.ID,
-UserRole: "creator",
-})
+	t.Run("Creator1_CanAccessOwnDraftTest", func(t *testing.T) {
+		result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
+			TestID:   draftTest.ID,
+			UserID:   creator1.ID,
+			UserRole: "creator",
+		})
 
-require.NoError(t, err)
-assert.NotNil(t, result)
-assert.Equal(t, draftTest.ID, result.ID)
-assert.Equal(t, "Creator1 Draft Test", result.Title)
-assert.False(t, result.IsPublished)
-})
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, draftTest.ID, result.Test.ID)
+		assert.Equal(t, "Creator1 Draft Test", result.Test.Title)
+		assert.False(t, result.Test.IsPublished)
+	})
 
-t.Run("Creator1_CannotAccessCreator2Test", func(t *testing.T) {
-result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
-TestID:   creator2Test.ID,
-UserID:   creator1.ID,
-UserRole: "creator",
-})
+	t.Run("Creator1_CannotAccessCreator2Test", func(t *testing.T) {
+		result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
+			TestID:   creator2Test.ID,
+			UserID:   creator1.ID,
+			UserRole: "creator",
+		})
 
-require.Error(t, err)
-assert.Nil(t, result)
-var authErr domain.ErrUnauthorized
-assert.ErrorAs(t, err, &authErr)
-})
+		require.Error(t, err)
+		assert.Nil(t, result)
+		var authErr domain.ErrUnauthorized
+		assert.ErrorAs(t, err, &authErr)
+	})
 
-t.Run("Reviewer_CanAccessPublishedTest", func(t *testing.T) {
-result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
-TestID:   publishedTest.ID,
-UserID:   reviewer.ID,
-UserRole: "reviewer",
-})
+	t.Run("Reviewer_CanAccessPublishedTest", func(t *testing.T) {
+		result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
+			TestID:   publishedTest.ID,
+			UserID:   reviewer.ID,
+			UserRole: "reviewer",
+		})
 
-require.NoError(t, err)
-assert.NotNil(t, result)
-assert.Equal(t, publishedTest.ID, result.ID)
-assert.True(t, result.IsPublished)
-})
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, publishedTest.ID, result.Test.ID)
+		assert.True(t, result.Test.IsPublished)
+	})
 
-t.Run("Reviewer_CannotAccessDraftTest", func(t *testing.T) {
-result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
-TestID:   draftTest.ID,
-UserID:   reviewer.ID,
-UserRole: "reviewer",
-})
+	t.Run("Reviewer_CannotAccessDraftTest", func(t *testing.T) {
+		result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
+			TestID:   draftTest.ID,
+			UserID:   reviewer.ID,
+			UserRole: "reviewer",
+		})
 
-require.Error(t, err)
-assert.Nil(t, result)
-var authErr domain.ErrUnauthorized
-assert.ErrorAs(t, err, &authErr)
-})
+		require.Error(t, err)
+		assert.Nil(t, result)
+		var authErr domain.ErrUnauthorized
+		assert.ErrorAs(t, err, &authErr)
+	})
 
-t.Run("TestNotFound", func(t *testing.T) {
-nonExistentID := uuid.New()
-result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
-TestID:   nonExistentID,
-UserID:   creator1.ID,
-UserRole: "creator",
-})
+	t.Run("TestNotFound", func(t *testing.T) {
+		nonExistentID := uuid.New()
+		result, err := getTestUC.Execute(ctx, testUC.GetTestRequest{
+			TestID:   nonExistentID,
+			UserID:   creator1.ID,
+			UserRole: "creator",
+		})
 
-require.Error(t, err)
-assert.Nil(t, result)
-var notFoundErr domain.ErrNotFound
-assert.ErrorAs(t, err, &notFoundErr)
-})
+		require.Error(t, err)
+		assert.Nil(t, result)
+		var notFoundErr domain.ErrNotFound
+		assert.ErrorAs(t, err, &notFoundErr)
+	})
 
-// Cleanup
-t.Run("Cleanup", func(t *testing.T) {
-// Delete questions first
-_, err := pool.Exec(ctx, "DELETE FROM questions WHERE test_id IN ($1, $2, $3)",
-publishedTest.ID, draftTest.ID, creator2Test.ID)
-require.NoError(t, err)
+	// Cleanup
+	t.Run("Cleanup", func(t *testing.T) {
+		// Delete questions first
+		_, err := pool.Exec(ctx, "DELETE FROM questions WHERE test_id IN ($1, $2, $3)",
+			publishedTest.ID, draftTest.ID, creator2Test.ID)
+		require.NoError(t, err)
 
-// Delete tests
-_, err = pool.Exec(ctx, "DELETE FROM tests WHERE id IN ($1, $2, $3)",
-publishedTest.ID, draftTest.ID, creator2Test.ID)
-require.NoError(t, err)
+		// Delete tests
+		_, err = pool.Exec(ctx, "DELETE FROM tests WHERE id IN ($1, $2, $3)",
+			publishedTest.ID, draftTest.ID, creator2Test.ID)
+		require.NoError(t, err)
 
-// Delete users
-_, err = pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2, $3)",
-creator1.ID, creator2.ID, reviewer.ID)
-require.NoError(t, err)
-})
+		// Delete users
+		_, err = pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2, $3)",
+			creator1.ID, creator2.ID, reviewer.ID)
+		require.NoError(t, err)
+	})
 }

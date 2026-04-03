@@ -252,9 +252,11 @@ paths:
       tags: [Tests]
       summary: List tests
       description: |
-        List tests based on user role:
+        List tests with their questions based on user role:
         - Creators: Only their own tests
         - Reviewers: All published tests
+        
+        Each test includes all its questions in the response.
       operationId: listTests
       parameters:
         - name: status
@@ -288,7 +290,7 @@ paths:
                   tests:
                     type: array
                     items:
-                      $ref: '#/components/schemas/TestSummary'
+                      $ref: '#/components/schemas/TestWithQuestions'
                   pagination:
                     $ref: '#/components/schemas/Pagination'
         '401':

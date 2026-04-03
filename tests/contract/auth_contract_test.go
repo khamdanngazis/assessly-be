@@ -29,7 +29,7 @@ func TestAuthRegisterContract(t *testing.T) {
 
 	// Create real use case with mocks
 	registerUC := authUC.NewRegisterUserUseCase(mockUserRepo, mockPasswordHasher, logger)
-	authHandler := handler.NewAuthHandler(registerUC, nil, nil, nil, logger)
+	authHandler := handler.NewAuthHandler(registerUC, nil, nil, nil, nil, logger)
 
 	t.Run("should return 201 with correct response schema on successful registration", func(t *testing.T) {
 		// Prepare mock responses
@@ -40,7 +40,7 @@ func TestAuthRegisterContract(t *testing.T) {
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
-		
+
 		mockUserRepo.FindByEmailFunc = func(ctx context.Context, email string) (*domain.User, error) {
 			return nil, domain.ErrNotFound{Resource: "user", ID: email}
 		}
@@ -56,6 +56,7 @@ func TestAuthRegisterContract(t *testing.T) {
 
 		// Prepare request
 		reqBody := map[string]interface{}{
+			"name":     "Test User",
 			"email":    "test@example.com",
 			"password": "password123",
 			"role":     "creator",
@@ -116,6 +117,7 @@ func TestAuthRegisterContract(t *testing.T) {
 
 	t.Run("should return 400 when role is invalid", func(t *testing.T) {
 		reqBody := map[string]interface{}{
+			"name":     "Test User",
 			"email":    "test@example.com",
 			"password": "password123",
 			"role":     "invalid_role",
@@ -143,6 +145,7 @@ func TestAuthRegisterContract(t *testing.T) {
 		}
 
 		reqBody := map[string]interface{}{
+			"name":     "Existing User",
 			"email":    "existing@example.com",
 			"password": "password123",
 			"role":     "creator",
@@ -168,8 +171,7 @@ func TestAuthRegisterContract(t *testing.T) {
 			return nil, nil
 		}
 
-		reqBody := map[string]interface{}{
-			"email":    "",  // Empty email
+		reqBody := map[string]interface{}{"name": "", // Empty name			"email":    "", // Empty email
 			"password": "password123",
 			"role":     "creator",
 		}
@@ -199,7 +201,7 @@ func TestAuthLoginContract(t *testing.T) {
 
 	// Create real use case with mocks
 	loginUC := authUC.NewLoginUserUseCase(mockUserRepo, mockPasswordHasher, mockJWTService, logger)
-	authHandler := handler.NewAuthHandler(nil, loginUC, nil, nil, logger)
+	authHandler := handler.NewAuthHandler(nil, loginUC, nil, nil, nil, logger)
 
 	t.Run("should return 200 with correct response schema on successful login", func(t *testing.T) {
 		// Prepare mock user with hashed password
@@ -313,7 +315,7 @@ func TestAuthLoginContract(t *testing.T) {
 
 	t.Run("should return 400 when validation fails", func(t *testing.T) {
 		reqBody := map[string]interface{}{
-			"email":    "",  // Empty email
+			"email":    "", // Empty email
 			"password": "password123",
 		}
 		reqJSON, _ := json.Marshal(reqBody)
