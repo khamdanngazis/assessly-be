@@ -302,11 +302,11 @@ func (h *mockTestHandlerForRouter) GetTest(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":            "test-123",
+		"creator_id":    "creator-123",
 		"title":         "Test",
-		"description":   "Test",
+		"description":   "Test Description",
 		"allow_retakes": true,
 		"is_published":  false,
-		"creator_id":    "creator-123",
 		"created_at":    "2024-01-01T00:00:00Z",
 		"updated_at":    "2024-01-01T00:00:00Z",
 	})
