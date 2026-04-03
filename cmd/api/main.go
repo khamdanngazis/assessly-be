@@ -88,10 +88,13 @@ func main() {
 	// Initialize auth use cases
 	registerUC := authUC.NewRegisterUserUseCase(userRepo, passwordHasher, slog.Default())
 	loginUC := authUC.NewLoginUserUseCase(userRepo, passwordHasher, jwtService, slog.Default())
+	getCurrentUserUC := authUC.NewGetCurrentUserUseCase(userRepo)
 	
 	// Initialize test use cases
 	createTestUC := testUC.NewCreateTestUseCase(testRepo, slog.Default())
 	addQuestionUC := testUC.NewAddQuestionUseCase(questionRepo, testRepo, slog.Default())
+	updateQuestionUC := testUC.NewUpdateQuestionUseCase(questionRepo, testRepo, slog.Default())
+	deleteQuestionUC := testUC.NewDeleteQuestionUseCase(questionRepo, testRepo, slog.Default())
 	publishTestUC := testUC.NewPublishTestUseCase(testRepo, questionRepo, slog.Default())
 	listTestsUC := testUC.NewListTestsUseCase(testRepo)
 	getTestUC := testUC.NewGetTestUseCase(testRepo)
@@ -137,9 +140,9 @@ func main() {
 	getReviewUC := reviewUC.NewGetReviewUseCase(reviewRepo, slog.Default())
 	
 	// Initialize HTTP handlers
-	authHandler := handler.NewAuthHandler(registerUC, loginUC, requestResetUC, resetPasswordUC, slog.Default())
+	authHandler := handler.NewAuthHandler(registerUC, loginUC, requestResetUC, resetPasswordUC, getCurrentUserUC, slog.Default())
 	testHandler := handler.NewTestHandler(createTestUC, publishTestUC, listTestsUC, getTestUC, slog.Default())
-	questionHandler := handler.NewQuestionHandler(addQuestionUC, slog.Default())
+	questionHandler := handler.NewQuestionHandler(addQuestionUC, updateQuestionUC, deleteQuestionUC, slog.Default())
 	submissionHandler := handler.NewSubmissionHandler(
 		generateAccessTokenUC,
 		submitTestUC,

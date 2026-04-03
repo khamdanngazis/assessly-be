@@ -5,17 +5,20 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/assessly/assessly-be/internal/delivery/http/middleware"
 	"github.com/assessly/assessly-be/internal/domain"
 	"github.com/assessly/assessly-be/internal/usecase/auth"
+	"github.com/google/uuid"
 )
 
 // AuthHandler handles authentication-related HTTP requests
 type AuthHandler struct {
-	registerUC      *auth.RegisterUserUseCase
-	loginUC         *auth.LoginUserUseCase
-	requestResetUC  *auth.RequestPasswordResetUseCase
-	resetPasswordUC *auth.ResetPasswordUseCase
-	logger          *slog.Logger
+	registerUC       *auth.RegisterUserUseCase
+	loginUC          *auth.LoginUserUseCase
+	requestResetUC   *auth.RequestPasswordResetUseCase
+	resetPasswordUC  *auth.ResetPasswordUseCase
+	getCurrentUserUC *auth.GetCurrentUserUseCase
+	logger           *slog.Logger
 }
 
 // NewAuthHandler creates a new auth handler
@@ -24,14 +27,16 @@ func NewAuthHandler(
 	loginUC *auth.LoginUserUseCase,
 	requestResetUC *auth.RequestPasswordResetUseCase,
 	resetPasswordUC *auth.ResetPasswordUseCase,
+	getCurrentUserUC *auth.GetCurrentUserUseCase,
 	logger *slog.Logger,
 ) *AuthHandler {
 	return &AuthHandler{
-		registerUC:      registerUC,
-		loginUC:         loginUC,
-		requestResetUC:  requestResetUC,
-		resetPasswordUC: resetPasswordUC,
-		logger:          logger,
+		registerUC:       registerUC,
+		loginUC:          loginUC,
+		requestResetUC:   requestResetUC,
+		resetPasswordUC:  resetPasswordUC,
+		getCurrentUserUC: getCurrentUserUC,
+		logger:           logger,
 	}
 }
 
@@ -111,10 +116,12 @@ type LoginResponse struct {
 
 // UserResponse represents user data in responses
 type UserResponse struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
 // Login handles user login
@@ -225,6 +232,44 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 	resp := ResetPasswordResponse{
 		Message: "Password reset successfully",
+	}
+
+	h.respondJSON(w, http.StatusOK, resp)
+}
+
+// GetCurrentUser handles getting current user information
+func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	// Extract user ID from JWT context
+	userIDStr, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		h.respondError(w, http.StatusUnauthorized, "user ID not found in context")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "invalid user ID")
+		return
+	}
+
+	// Execute use case
+	user, err := h.getCurrentUserUC.Execute(r.Context(), auth.GetCurrentUserRequest{
+		UserID: userID,
+	})
+
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	// Build response
+	resp := UserResponse{
+		ID:        user.ID.String(),
+		Name:      user.Name,
+		Email:     user.Email,
+		Role:      string(user.Role),
+		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt: user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 
 	h.respondJSON(w, http.StatusOK, resp)

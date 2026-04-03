@@ -29,6 +29,7 @@ func (r *Router) SetupRoutes(
 		Login(w http.ResponseWriter, r *http.Request)
 		RequestPasswordReset(w http.ResponseWriter, r *http.Request)
 		ResetPassword(w http.ResponseWriter, r *http.Request)
+		GetCurrentUser(w http.ResponseWriter, r *http.Request)
 	},
 	testHandler interface {
 		ListTests(w http.ResponseWriter, r *http.Request)
@@ -38,6 +39,8 @@ func (r *Router) SetupRoutes(
 	},
 	questionHandler interface {
 		AddQuestion(w http.ResponseWriter, r *http.Request)
+		UpdateQuestion(w http.ResponseWriter, r *http.Request)
+		DeleteQuestion(w http.ResponseWriter, r *http.Request)
 	},
 	submissionHandler interface {
 		GenerateAccessToken(w http.ResponseWriter, r *http.Request)
@@ -123,20 +126,22 @@ func (r *Router) SetupRoutes(
 					r.Post("/{testID}/publish", notImplementedHandler)
 				}
 
-					// Questions
-					if questionHandler != nil {
-						r.Post("/{testID}/questions", questionHandler.AddQuestion)
-					} else {
-						r.Post("/{testID}/questions", notImplementedHandler)
-					}
+				// Questions
+				if questionHandler != nil {
+					r.Post("/{testID}/questions", questionHandler.AddQuestion)
+					r.Put("/{testID}/questions/{questionID}", questionHandler.UpdateQuestion)
+					r.Delete("/{testID}/questions/{questionID}", questionHandler.DeleteQuestion)
+				} else {
+					r.Post("/{testID}/questions", notImplementedHandler)
 					r.Put("/{testID}/questions/{questionID}", notImplementedHandler)
 					r.Delete("/{testID}/questions/{questionID}", notImplementedHandler)
+				}
 
-					// Testing endpoint: Generate access token for test (development only)
-					if submissionHandler != nil {
-						r.Post("/{testID}/access-token", submissionHandler.GenerateAccessTokenForTest)
-					}
-				})
+				// Testing endpoint: Generate access token for test (development only)
+				if submissionHandler != nil {
+					r.Post("/{testID}/access-token", submissionHandler.GenerateAccessTokenForTest)
+				}
+			})
 
 				// Reviewer-only routes
 				r.Group(func(r chi.Router) {
@@ -165,7 +170,11 @@ func (r *Router) SetupRoutes(
 			})
 
 			// User endpoints
-			r.Get("/me", notImplementedHandler)
+			if authHandler != nil {
+				r.Get("/me", authHandler.GetCurrentUser)
+			} else {
+				r.Get("/me", notImplementedHandler)
+			}
 		})
 	})
 }

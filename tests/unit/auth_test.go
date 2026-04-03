@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/assessly/assessly-be/internal/domain"
 	"github.com/assessly/assessly-be/internal/usecase/auth"
@@ -416,4 +417,66 @@ func TestResetPassword_ShortPassword(t *testing.T) {
 	assert.Error(t, err)
 	assert.IsType(t, domain.ErrValidation{}, err)
 	mockTokenValidator.AssertNotCalled(t, "ValidateToken")
+}
+
+// ============================================================================
+// GetCurrentUserUseCase Tests
+// ============================================================================
+
+func TestGetCurrentUser_Success(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	useCase := auth.NewGetCurrentUserUseCase(mockUserRepo)
+
+	userID := uuid.New()
+	expectedUser := &domain.User{
+		ID:           userID,
+		Name:         "John Doe",
+		Email:        "john@example.com",
+		PasswordHash: "hashed",
+		Role:         domain.RoleCreator,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	mockUserRepo.On("FindByID", mock.Anything, userID).Return(expectedUser, nil)
+
+	// Act
+	user, err := useCase.Execute(context.Background(), auth.GetCurrentUserRequest{
+		UserID: userID,
+	})
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, user)
+	assert.Equal(t, userID, user.ID)
+	assert.Equal(t, "John Doe", user.Name)
+	assert.Equal(t, "john@example.com", user.Email)
+	assert.Equal(t, domain.RoleCreator, user.Role)
+	mockUserRepo.AssertExpectations(t)
+}
+
+func TestGetCurrentUser_UserNotFound(t *testing.T) {
+	// Arrange
+	mockUserRepo := new(MockUserRepository)
+	useCase := auth.NewGetCurrentUserUseCase(mockUserRepo)
+
+	userID := uuid.New()
+
+	mockUserRepo.On("FindByID", mock.Anything, userID).Return(nil, domain.ErrNotFound{
+		Resource: "user",
+		ID:       userID.String(),
+	})
+
+	// Act
+	user, err := useCase.Execute(context.Background(), auth.GetCurrentUserRequest{
+		UserID: userID,
+	})
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, user)
+	var notFoundErr domain.ErrNotFound
+	assert.ErrorAs(t, err, &notFoundErr)
+	mockUserRepo.AssertExpectations(t)
 }

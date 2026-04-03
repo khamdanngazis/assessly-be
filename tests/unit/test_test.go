@@ -974,3 +974,353 @@ var authErr domain.ErrUnauthorized
 assert.ErrorAs(t, err, &authErr)
 mockTestRepo.AssertExpectations(t)
 }
+// ============================================================================
+// UpdateQuestionUseCase Tests
+// ============================================================================
+
+func TestUpdateQuestion_Success(t *testing.T) {
+	// Arrange
+	mockQuestionRepo := new(MockQuestionRepository)
+	mockTestRepo := new(MockTestRepository)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := test.NewUpdateQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
+
+	creatorID := uuid.New()
+	testID := uuid.New()
+	questionID := uuid.New()
+
+	existingQuestion := &domain.Question{
+		ID:             questionID,
+		TestID:         testID,
+		Text:           "Old question text",
+		ExpectedAnswer: "Old expected answer",
+		OrderNum:       1,
+		CreatedAt:      time.Now(),
+	}
+
+	testEntity := &domain.Test{
+		ID:          testID,
+		CreatorID:   creatorID,
+		Title:       "Test",
+		IsPublished: false,
+	}
+
+	req := test.UpdateQuestionRequest{
+		QuestionID:     questionID,
+		TestID:         testID,
+		CreatorID:      creatorID,
+		Text:           "Updated question text",
+		ExpectedAnswer: "Updated expected answer",
+		OrderNum:       2,
+	}
+
+	mockQuestionRepo.On("FindByID", mock.Anything, questionID).Return(existingQuestion, nil)
+	mockTestRepo.On("FindByID", mock.Anything, testID).Return(testEntity, nil)
+	mockQuestionRepo.On("Update", mock.Anything, mock.MatchedBy(func(q *domain.Question) bool {
+		return q.ID == questionID &&
+			q.Text == "Updated question text" &&
+			q.ExpectedAnswer == "Updated expected answer" &&
+			q.OrderNum == 2
+	})).Return(nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "Updated question text", result.Text)
+	assert.Equal(t, "Updated expected answer", result.ExpectedAnswer)
+	assert.Equal(t, 2, result.OrderNum)
+	mockQuestionRepo.AssertExpectations(t)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestUpdateQuestion_UnauthorizedCreator(t *testing.T) {
+	// Arrange
+	mockQuestionRepo := new(MockQuestionRepository)
+	mockTestRepo := new(MockTestRepository)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := test.NewUpdateQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
+
+	creatorID := uuid.New()
+	otherCreatorID := uuid.New()
+	testID := uuid.New()
+	questionID := uuid.New()
+
+	existingQuestion := &domain.Question{
+		ID:             questionID,
+		TestID:         testID,
+		Text:           "Question text",
+		ExpectedAnswer: "Expected answer",
+		OrderNum:       1,
+		CreatedAt:      time.Now(),
+	}
+
+	testEntity := &domain.Test{
+		ID:          testID,
+		CreatorID:   otherCreatorID, // Different creator
+		Title:       "Test",
+		IsPublished: false,
+	}
+
+	mockQuestionRepo.On("FindByID", mock.Anything, questionID).Return(existingQuestion, nil)
+	mockTestRepo.On("FindByID", mock.Anything, testID).Return(testEntity, nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), test.UpdateQuestionRequest{
+		QuestionID:     questionID,
+		TestID:         testID,
+		CreatorID:      creatorID,
+		Text:           "Updated text",
+		ExpectedAnswer: "Updated answer",
+	})
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	var authErr domain.ErrUnauthorized
+	assert.ErrorAs(t, err, &authErr)
+	mockQuestionRepo.AssertExpectations(t)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestUpdateQuestion_PublishedTest(t *testing.T) {
+	// Arrange
+	mockQuestionRepo := new(MockQuestionRepository)
+	mockTestRepo := new(MockTestRepository)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := test.NewUpdateQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
+
+	creatorID := uuid.New()
+	testID := uuid.New()
+	questionID := uuid.New()
+
+	existingQuestion := &domain.Question{
+		ID:             questionID,
+		TestID:         testID,
+		Text:           "Question text",
+		ExpectedAnswer: "Expected answer",
+		OrderNum:       1,
+		CreatedAt:      time.Now(),
+	}
+
+	testEntity := &domain.Test{
+		ID:          testID,
+		CreatorID:   creatorID,
+		Title:       "Test",
+		IsPublished: true, // Published test
+	}
+
+	mockQuestionRepo.On("FindByID", mock.Anything, questionID).Return(existingQuestion, nil)
+	mockTestRepo.On("FindByID", mock.Anything, testID).Return(testEntity, nil)
+
+	// Act
+	result, err := useCase.Execute(context.Background(), test.UpdateQuestionRequest{
+		QuestionID:     questionID,
+		TestID:         testID,
+		CreatorID:      creatorID,
+		Text:           "Updated text",
+		ExpectedAnswer: "Updated answer",
+	})
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	var validationErr domain.ErrValidation
+	assert.ErrorAs(t, err, &validationErr)
+	mockQuestionRepo.AssertExpectations(t)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestUpdateQuestion_QuestionNotFound(t *testing.T) {
+	// Arrange
+	mockQuestionRepo := new(MockQuestionRepository)
+	mockTestRepo := new(MockTestRepository)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := test.NewUpdateQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
+
+	questionID := uuid.New()
+	testID := uuid.New()
+	creatorID := uuid.New()
+
+	mockQuestionRepo.On("FindByID", mock.Anything, questionID).Return(nil, domain.ErrNotFound{Resource: "question", ID: questionID.String()})
+
+	// Act
+	result, err := useCase.Execute(context.Background(), test.UpdateQuestionRequest{
+		QuestionID:     questionID,
+		TestID:         testID,
+		CreatorID:      creatorID,
+		Text:           "Updated text",
+		ExpectedAnswer: "Updated answer",
+	})
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	mockQuestionRepo.AssertExpectations(t)
+}
+
+// ============================================================================
+// DeleteQuestionUseCase Tests
+// ============================================================================
+
+func TestDeleteQuestion_Success(t *testing.T) {
+	// Arrange
+	mockQuestionRepo := new(MockQuestionRepository)
+	mockTestRepo := new(MockTestRepository)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := test.NewDeleteQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
+
+	creatorID := uuid.New()
+	testID := uuid.New()
+	questionID := uuid.New()
+
+	existingQuestion := &domain.Question{
+		ID:             questionID,
+		TestID:         testID,
+		Text:           "Question text",
+		ExpectedAnswer: "Expected answer",
+		OrderNum:       1,
+		CreatedAt:      time.Now(),
+	}
+
+	testEntity := &domain.Test{
+		ID:          testID,
+		CreatorID:   creatorID,
+		Title:       "Test",
+		IsPublished: false,
+	}
+
+	mockQuestionRepo.On("FindByID", mock.Anything, questionID).Return(existingQuestion, nil)
+	mockTestRepo.On("FindByID", mock.Anything, testID).Return(testEntity, nil)
+	mockQuestionRepo.On("Delete", mock.Anything, questionID).Return(nil)
+
+	// Act
+	err := useCase.Execute(context.Background(), test.DeleteQuestionRequest{
+		QuestionID: questionID,
+		TestID:     testID,
+		CreatorID:  creatorID,
+	})
+
+	// Assert
+	assert.NoError(t, err)
+	mockQuestionRepo.AssertExpectations(t)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestDeleteQuestion_UnauthorizedCreator(t *testing.T) {
+	// Arrange
+	mockQuestionRepo := new(MockQuestionRepository)
+	mockTestRepo := new(MockTestRepository)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := test.NewDeleteQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
+
+	creatorID := uuid.New()
+	otherCreatorID := uuid.New()
+	testID := uuid.New()
+	questionID := uuid.New()
+
+	existingQuestion := &domain.Question{
+		ID:             questionID,
+		TestID:         testID,
+		Text:           "Question text",
+		ExpectedAnswer: "Expected answer",
+		OrderNum:       1,
+		CreatedAt:      time.Now(),
+	}
+
+	testEntity := &domain.Test{
+		ID:          testID,
+		CreatorID:   otherCreatorID, // Different creator
+		Title:       "Test",
+		IsPublished: false,
+	}
+
+	mockQuestionRepo.On("FindByID", mock.Anything, questionID).Return(existingQuestion, nil)
+	mockTestRepo.On("FindByID", mock.Anything, testID).Return(testEntity, nil)
+
+	// Act
+	err := useCase.Execute(context.Background(), test.DeleteQuestionRequest{
+		QuestionID: questionID,
+		TestID:     testID,
+		CreatorID:  creatorID,
+	})
+
+	// Assert
+	assert.Error(t, err)
+	var authErr domain.ErrUnauthorized
+	assert.ErrorAs(t, err, &authErr)
+	mockQuestionRepo.AssertExpectations(t)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestDeleteQuestion_PublishedTest(t *testing.T) {
+	// Arrange
+	mockQuestionRepo := new(MockQuestionRepository)
+	mockTestRepo := new(MockTestRepository)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := test.NewDeleteQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
+
+	creatorID := uuid.New()
+	testID := uuid.New()
+	questionID := uuid.New()
+
+	existingQuestion := &domain.Question{
+		ID:             questionID,
+		TestID:         testID,
+		Text:           "Question text",
+		ExpectedAnswer: "Expected answer",
+		OrderNum:       1,
+		CreatedAt:      time.Now(),
+	}
+
+	testEntity := &domain.Test{
+		ID:          testID,
+		CreatorID:   creatorID,
+		Title:       "Test",
+		IsPublished: true, // Published test
+	}
+
+	mockQuestionRepo.On("FindByID", mock.Anything, questionID).Return(existingQuestion, nil)
+	mockTestRepo.On("FindByID", mock.Anything, testID).Return(testEntity, nil)
+
+	// Act
+	err := useCase.Execute(context.Background(), test.DeleteQuestionRequest{
+		QuestionID: questionID,
+		TestID:     testID,
+		CreatorID:  creatorID,
+	})
+
+	// Assert
+	assert.Error(t, err)
+	var validationErr domain.ErrValidation
+	assert.ErrorAs(t, err, &validationErr)
+	mockQuestionRepo.AssertExpectations(t)
+	mockTestRepo.AssertExpectations(t)
+}
+
+func TestDeleteQuestion_QuestionNotFound(t *testing.T) {
+	// Arrange
+	mockQuestionRepo := new(MockQuestionRepository)
+	mockTestRepo := new(MockTestRepository)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	useCase := test.NewDeleteQuestionUseCase(mockQuestionRepo, mockTestRepo, logger)
+
+	questionID := uuid.New()
+	testID := uuid.New()
+	creatorID := uuid.New()
+
+	mockQuestionRepo.On("FindByID", mock.Anything, questionID).Return(nil, domain.ErrNotFound{Resource: "question", ID: questionID.String()})
+
+	// Act
+	err := useCase.Execute(context.Background(), test.DeleteQuestionRequest{
+		QuestionID: questionID,
+		TestID:     testID,
+		CreatorID:  creatorID,
+	})
+
+	// Assert
+	assert.Error(t, err)
+	mockQuestionRepo.AssertExpectations(t)
+}
