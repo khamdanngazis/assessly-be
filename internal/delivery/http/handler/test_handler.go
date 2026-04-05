@@ -16,6 +16,7 @@ import (
 // TestHandler handles test-related HTTP requests
 type TestHandler struct {
 	createTestUC  *test.CreateTestUseCase
+	updateTestUC  *test.UpdateTestUseCase
 	publishTestUC *test.PublishTestUseCase
 	listTestsUC   *test.ListTestsUseCase
 	getTestUC     *test.GetTestUseCase
@@ -25,6 +26,7 @@ type TestHandler struct {
 // NewTestHandler creates a new test handler
 func NewTestHandler(
 	createTestUC *test.CreateTestUseCase,
+	updateTestUC *test.UpdateTestUseCase,
 	publishTestUC *test.PublishTestUseCase,
 	listTestsUC *test.ListTestsUseCase,
 	getTestUC *test.GetTestUseCase,
@@ -32,6 +34,7 @@ func NewTestHandler(
 ) *TestHandler {
 	return &TestHandler{
 		createTestUC:  createTestUC,
+		updateTestUC:  updateTestUC,
 		publishTestUC: publishTestUC,
 		listTestsUC:   listTestsUC,
 		getTestUC:     getTestUC,
@@ -41,6 +44,13 @@ func NewTestHandler(
 
 // CreateTestRequest represents the create test request body
 type CreateTestRequest struct {
+	Title        string `json:"title"`
+	Description  string `json:"description"`
+	AllowRetakes bool   `json:"allow_retakes"`
+}
+
+// UpdateTestRequest represents the update test request body
+type UpdateTestRequest struct {
 	Title        string `json:"title"`
 	Description  string `json:"description"`
 	AllowRetakes bool   `json:"allow_retakes"`
@@ -277,6 +287,70 @@ func (h *TestHandler) CreateTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondJSON(w, http.StatusCreated, resp)
+}
+
+// UpdateTest handles test updates
+func (h *TestHandler) UpdateTest(w http.ResponseWriter, r *http.Request) {
+	// Get test ID from URL
+	testIDStr := chi.URLParam(r, "testID")
+	if testIDStr == "" {
+		h.respondError(w, http.StatusBadRequest, "test ID is required")
+		return
+	}
+
+	testID, err := uuid.Parse(testIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid test ID")
+		return
+	}
+
+	// Get creator ID from context
+	creatorIDStr, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		h.respondError(w, http.StatusUnauthorized, "user not authenticated")
+		return
+	}
+
+	creatorID, err := uuid.Parse(creatorIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "invalid user ID")
+		return
+	}
+
+	// Parse request body
+	var req UpdateTestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Execute use case
+	testEntity, err := h.updateTestUC.Execute(r.Context(), test.UpdateTestRequest{
+		TestID:       testID,
+		CreatorID:    creatorID,
+		Title:        req.Title,
+		Description:  req.Description,
+		AllowRetakes: req.AllowRetakes,
+	})
+
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	// Respond with updated test
+	resp := TestResponse{
+		ID:           testEntity.ID.String(),
+		CreatorID:    testEntity.CreatorID.String(),
+		Title:        testEntity.Title,
+		Description:  testEntity.Description,
+		AllowRetakes: testEntity.AllowRetakes,
+		IsPublished:  testEntity.IsPublished,
+		CreatedAt:    testEntity.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:    testEntity.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+
+	h.respondJSON(w, http.StatusOK, resp)
 }
 
 // PublishTest handles test publication

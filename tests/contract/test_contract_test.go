@@ -29,7 +29,7 @@ func TestCreateTestContract(t *testing.T) {
 
 	// Create real use case with mocks
 	createTestUC := testUC.NewCreateTestUseCase(mockTestRepo, logger)
-	testHandler := handler.NewTestHandler(createTestUC, nil, nil, nil, logger)
+	testHandler := handler.NewTestHandler(createTestUC, nil, nil, nil, nil, logger)
 
 	t.Run("should return 201 with correct response schema on successful test creation", func(t *testing.T) {
 		// Prepare mock response
@@ -153,6 +153,337 @@ func TestCreateTestContract(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		testHandler.CreateTest(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, "should return 400 Bad Request")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+}
+
+// TestUpdateTestContract validates the HTTP contract for PUT /api/v1/tests/:id
+func TestUpdateTestContract(t *testing.T) {
+	// Setup mocks
+	mockTestRepo := &MockTestRepository{}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	// Create real use case with mocks
+	updateTestUC := testUC.NewUpdateTestUseCase(mockTestRepo, logger)
+	testHandler := handler.NewTestHandler(nil, updateTestUC, nil, nil, nil, logger)
+
+	t.Run("should return 200 with correct response schema on successful test update", func(t *testing.T) {
+		testID := uuid.New()
+		creatorID := uuid.New()
+
+		// Mock test exists and is not published
+		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
+			return &domain.Test{
+				ID:           testID,
+				CreatorID:    creatorID,
+				Title:        "Old Title",
+				Description:  "Old Description",
+				AllowRetakes: false,
+				IsPublished:  false,
+				CreatedAt:    time.Now(),
+				UpdatedAt:    time.Now(),
+			}, nil
+		}
+
+		mockTestRepo.UpdateFunc = func(ctx context.Context, test *domain.Test) error {
+			test.UpdatedAt = time.Now()
+			return nil
+		}
+
+		// Prepare request
+		reqBody := map[string]interface{}{
+			"title":         "Updated Title",
+			"description":   "Updated Description",
+			"allow_retakes": true,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tests/"+testID.String(), bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		// Add user_id and testID to context
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		// Execute
+		testHandler.UpdateTest(w, req)
+
+		// Validate HTTP status code
+		assert.Equal(t, http.StatusOK, w.Code, "should return 200 OK")
+
+		// Validate response Content-Type
+		assert.Equal(t, "application/json", w.Header().Get("Content-Type"), "should return JSON content type")
+
+		// Validate response body schema
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "response should be valid JSON")
+
+		// Validate required fields exist
+		assert.Contains(t, resp, "id", "response should contain id field")
+		assert.Contains(t, resp, "creator_id", "response should contain creator_id field")
+		assert.Contains(t, resp, "title", "response should contain title field")
+		assert.Contains(t, resp, "description", "response should contain description field")
+		assert.Contains(t, resp, "allow_retakes", "response should contain allow_retakes field")
+		assert.Contains(t, resp, "is_published", "response should contain is_published field")
+		assert.Contains(t, resp, "created_at", "response should contain created_at field")
+		assert.Contains(t, resp, "updated_at", "response should contain updated_at field")
+
+		// Validate field types
+		assert.IsType(t, "", resp["id"], "id should be string")
+		assert.IsType(t, "", resp["creator_id"], "creator_id should be string")
+		assert.IsType(t, "", resp["title"], "title should be string")
+		assert.IsType(t, "", resp["description"], "description should be string")
+		assert.IsType(t, false, resp["allow_retakes"], "allow_retakes should be boolean")
+		assert.IsType(t, false, resp["is_published"], "is_published should be boolean")
+		assert.IsType(t, "", resp["created_at"], "created_at should be string")
+		assert.IsType(t, "", resp["updated_at"], "updated_at should be string")
+
+		// Validate field values
+		assert.Equal(t, "Updated Title", resp["title"], "title should match updated request")
+		assert.Equal(t, "Updated Description", resp["description"], "description should match updated request")
+		assert.Equal(t, true, resp["allow_retakes"], "allow_retakes should match updated request")
+	})
+
+	t.Run("should return 400 on invalid test ID", func(t *testing.T) {
+		creatorID := uuid.New()
+
+		reqBody := map[string]interface{}{
+			"title":         "Updated Title",
+			"description":   "Updated Description",
+			"allow_retakes": true,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tests/invalid-uuid", bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", "invalid-uuid")
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		testHandler.UpdateTest(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, "should return 400 Bad Request")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+
+	t.Run("should return 401 when user not authenticated", func(t *testing.T) {
+		testID := uuid.New()
+
+		reqBody := map[string]interface{}{
+			"title":         "Updated Title",
+			"description":   "Updated Description",
+			"allow_retakes": true,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tests/"+testID.String(), bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+
+		testHandler.UpdateTest(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "should return 401 Unauthorized")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+
+	t.Run("should return 401 when user is not the creator", func(t *testing.T) {
+		testID := uuid.New()
+		creatorID := uuid.New()
+		otherUserID := uuid.New()
+
+		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
+			return &domain.Test{
+				ID:           testID,
+				CreatorID:    creatorID,
+				Title:        "Old Title",
+				Description:  "Old Description",
+				AllowRetakes: false,
+				IsPublished:  false,
+				CreatedAt:    time.Now(),
+				UpdatedAt:    time.Now(),
+			}, nil
+		}
+
+		reqBody := map[string]interface{}{
+			"title":         "Updated Title",
+			"description":   "Updated Description",
+			"allow_retakes": true,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tests/"+testID.String(), bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, otherUserID.String())
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		testHandler.UpdateTest(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "should return 401 Unauthorized")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+
+	t.Run("should return 400 when test is already published", func(t *testing.T) {
+		testID := uuid.New()
+		creatorID := uuid.New()
+
+		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
+			return &domain.Test{
+				ID:           testID,
+				CreatorID:    creatorID,
+				Title:        "Test Title",
+				Description:  "Test Description",
+				AllowRetakes: false,
+				IsPublished:  true, // Already published
+				CreatedAt:    time.Now(),
+				UpdatedAt:    time.Now(),
+			}, nil
+		}
+
+		reqBody := map[string]interface{}{
+			"title":         "Updated Title",
+			"description":   "Updated Description",
+			"allow_retakes": true,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tests/"+testID.String(), bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		testHandler.UpdateTest(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, "should return 400 Bad Request")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+
+	t.Run("should return 404 when test not found", func(t *testing.T) {
+		testID := uuid.New()
+		creatorID := uuid.New()
+
+		mockTestRepo.FindByIDFunc = func(ctx context.Context, id uuid.UUID) (*domain.Test, error) {
+			return nil, domain.ErrNotFound{Resource: "test", ID: id.String()}
+		}
+
+		reqBody := map[string]interface{}{
+			"title":         "Updated Title",
+			"description":   "Updated Description",
+			"allow_retakes": true,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tests/"+testID.String(), bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		testHandler.UpdateTest(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code, "should return 404 Not Found")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+
+	t.Run("should return 400 on invalid JSON body", func(t *testing.T) {
+		testID := uuid.New()
+		creatorID := uuid.New()
+
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tests/"+testID.String(), bytes.NewReader([]byte("invalid json")))
+		req.Header.Set("Content-Type", "application/json")
+
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		testHandler.UpdateTest(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, "should return 400 Bad Request")
+
+		var resp map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err, "error response should be valid JSON")
+		assert.Contains(t, resp, "error", "error response should contain error field")
+	})
+
+	t.Run("should return 400 when validation fails", func(t *testing.T) {
+		testID := uuid.New()
+		creatorID := uuid.New()
+
+		reqBody := map[string]interface{}{
+			"title":         "", // Empty title
+			"description":   "Test description",
+			"allow_retakes": false,
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tests/"+testID.String(), bytes.NewReader(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+
+		ctx := context.WithValue(req.Context(), middleware.UserIDKey, creatorID.String())
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("testID", testID.String())
+		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		req = req.WithContext(ctx)
+
+		w := httptest.NewRecorder()
+
+		testHandler.UpdateTest(w, req)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code, "should return 400 Bad Request")
 
@@ -345,7 +676,7 @@ func TestPublishTestContract(t *testing.T) {
 
 	// Create real use case with mocks
 	publishTestUC := testUC.NewPublishTestUseCase(mockTestRepo, mockQuestionRepo, logger)
-	testHandler := handler.NewTestHandler(nil, publishTestUC, nil, nil, logger)
+	testHandler := handler.NewTestHandler(nil, nil, publishTestUC, nil, nil, logger)
 
 	t.Run("should return 200 with correct response schema on successful publish", func(t *testing.T) {
 		testID := uuid.New()

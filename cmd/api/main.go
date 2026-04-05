@@ -72,7 +72,7 @@ func main() {
 		Password: cfg.SMTP.Password,
 		From:     cfg.SMTP.From,
 	})
-	
+
 	// Initialize repositories
 	userRepo := postgres.NewUserRepository(db.Pool)
 	testRepo := postgres.NewTestRepository(db.Pool)
@@ -80,25 +80,26 @@ func main() {
 	submissionRepo := postgres.NewSubmissionRepository(db.Pool)
 	answerRepo := postgres.NewAnswerRepository(db.Pool)
 	reviewRepo := postgres.NewReviewRepository(db.Pool)
-	
+
 	// Initialize queue for AI scoring
 	queueClient := redis.NewQueueClient(redisClient.Redis, "submissions", slog.Default())
 	queueAdapter := redis.NewSubmissionQueueAdapter(queueClient)
-	
+
 	// Initialize auth use cases
 	registerUC := authUC.NewRegisterUserUseCase(userRepo, passwordHasher, slog.Default())
 	loginUC := authUC.NewLoginUserUseCase(userRepo, passwordHasher, jwtService, slog.Default())
 	getCurrentUserUC := authUC.NewGetCurrentUserUseCase(userRepo)
-	
+
 	// Initialize test use cases
 	createTestUC := testUC.NewCreateTestUseCase(testRepo, slog.Default())
+	updateTestUC := testUC.NewUpdateTestUseCase(testRepo, slog.Default())
 	addQuestionUC := testUC.NewAddQuestionUseCase(questionRepo, testRepo, slog.Default())
 	updateQuestionUC := testUC.NewUpdateQuestionUseCase(questionRepo, testRepo, slog.Default())
 	deleteQuestionUC := testUC.NewDeleteQuestionUseCase(questionRepo, testRepo, slog.Default())
 	publishTestUC := testUC.NewPublishTestUseCase(testRepo, questionRepo, slog.Default())
 	listTestsUC := testUC.NewListTestsUseCase(testRepo, questionRepo)
 	getTestUC := testUC.NewGetTestUseCase(testRepo, questionRepo)
-	
+
 	// Initialize submission use cases
 	generateAccessTokenUC := submissionUC.NewGenerateAccessTokenUseCase(
 		testRepo,
@@ -123,7 +124,7 @@ func main() {
 		&tokenValidatorAdapter{jwtService: jwtService},
 		slog.Default(),
 	)
-	
+
 	// Create token validator wrapper for reset password use case
 	tokenValidator := &tokenValidatorAdapter{jwtService: jwtService}
 	requestResetUC := authUC.NewRequestPasswordResetUseCase(
@@ -133,15 +134,15 @@ func main() {
 		slog.Default(),
 	)
 	resetPasswordUC := authUC.NewResetPasswordUseCase(userRepo, tokenValidator, passwordHasher, slog.Default())
-	
+
 	// Initialize review use cases
 	listSubmissionsUC := reviewUC.NewListSubmissionsUseCase(submissionRepo, slog.Default())
 	addManualReviewUC := reviewUC.NewAddManualReviewUseCase(reviewRepo, answerRepo, submissionRepo, slog.Default())
 	getReviewUC := reviewUC.NewGetReviewUseCase(reviewRepo, slog.Default())
-	
+
 	// Initialize HTTP handlers
 	authHandler := handler.NewAuthHandler(registerUC, loginUC, requestResetUC, resetPasswordUC, getCurrentUserUC, slog.Default())
-	testHandler := handler.NewTestHandler(createTestUC, publishTestUC, listTestsUC, getTestUC, slog.Default())
+	testHandler := handler.NewTestHandler(createTestUC, updateTestUC, publishTestUC, listTestsUC, getTestUC, slog.Default())
 	questionHandler := handler.NewQuestionHandler(addQuestionUC, updateQuestionUC, deleteQuestionUC, slog.Default())
 	submissionHandler := handler.NewSubmissionHandler(
 		generateAccessTokenUC,
@@ -156,10 +157,10 @@ func main() {
 		listSubmissionsUC,
 		slog.Default(),
 	)
-	
+
 	// T115: Initialize metrics handler
 	metricsHandler := handler.NewMetricsHandler()
-	
+
 	// Create JWT middleware
 	jwtMiddleware := middleware.JWTAuth(middleware.JWTConfig{
 		SecretKey: []byte(cfg.JWT.Secret),
@@ -168,18 +169,18 @@ func main() {
 
 	// Setup router with middleware
 	r := router.New()
-	
+
 	// Apply global middleware
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recovery(slog.Default()))
 	r.Use(middleware.Logger(slog.Default()))
-	
+
 	// Apply CORS middleware
 	corsConfig := middleware.DefaultCORSConfig()
 	// Note: AllowedOrigins would be configured here if needed
 	// corsConfig.AllowedOrigins = []string{"http://localhost:3000"}
 	r.Use(middleware.CORS(corsConfig))
-	
+
 	// Setup routes (T115: pass metricsHandler, T089: add reviewHandler)
 	r.SetupRoutes(
 		healthCheckHandler(db, redisClient),
@@ -192,7 +193,7 @@ func main() {
 		jwtMiddleware,
 		slog.Default(),
 	)
-	
+
 	// Create HTTP server
 	server := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
@@ -233,11 +234,11 @@ func main() {
 // runMigrations runs database migrations
 func runMigrations(cfg *config.Config) error {
 	slog.Info("running database migrations...")
-	
+
 	// TODO: Implement migration runner using golang-migrate
 	// For now, migrations should be run manually with:
 	// migrate -path ./migrations -database "postgres://..." up
-	
+
 	slog.Info("migrations completed (manual execution required)")
 	return nil
 }
@@ -251,7 +252,7 @@ func healthCheckHandler(db *postgres.DB, redis *redis.Client) http.HandlerFunc {
 		}
 
 		ctx := r.Context()
-		
+
 		// Check database
 		dbStatus := "connected"
 		if err := db.Health(ctx); err != nil {
@@ -267,7 +268,7 @@ func healthCheckHandler(db *postgres.DB, redis *redis.Client) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		if dbStatus == "connected" && redisStatus == "connected" {
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w, `{"status":"healthy","database":"%s","redis":"%s"}`, dbStatus, redisStatus)
@@ -335,4 +336,3 @@ func parsePort(portStr string) int {
 	}
 	return port
 }
-
